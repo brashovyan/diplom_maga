@@ -10,6 +10,18 @@
 #include <queue>
 #include <cstring>
 
+
+
+#define CONTROLLER_ID 1  // Для каждого из 6 контроллеров: 1, 2, 3, 4, 5, 6
+
+#include <WebServer.h>
+#include <ESPmDNS.h>
+
+WebServer server(80);
+
+
+
+
 // Структура для хранения UDP-пакета
 struct QueuedPacket {
     char data[600];  // Буфер приема пакетов UDP
@@ -204,7 +216,6 @@ bool loadNextVector() {
     
     if (sqlite3_step(res) == SQLITE_ROW) {
         previousVectorId = currentVectorId;
-        lastNeedW = currentW;
         
         currentVectorId = sqlite3_column_int(res, 0);
         currentV = sqlite3_column_double(res, 1);
@@ -531,6 +542,17 @@ void setup() {
   } else {
       Serial.println("Failed to start UDP Multicast listener. Check your network configuration.");
   }
+
+  // Запускаем веб сервер для логов
+  if (MDNS.begin(String("сontroller") + String(CONTROLLER_ID))) {
+      Serial.println("mDNS started: сontroller" + String(CONTROLLER_ID) + ".local");
+      MDNS.addService("http", "tcp", 80);
+  }
+  server.on("/", handleRoot);
+  server.on("/logs", handleLogs);
+  server.on("/logs/csv", handleLogsCSV);
+  server.on("/command", handleCommand);
+  server.begin();
     
   Serial.println("Готов к приему траекторий");
 }
@@ -559,10 +581,143 @@ void loop() {
             processMovement();
         }
     }
+
+    // Слушаем обращения к веб серверу логов
+    server.handleClient();
     
     delay(0.01);  // Отдаём процессорное время
 }
 
 void loop1() {
 
+}
+
+// Веб сайт для логов и управления роботом (нейрослоп, не тестировал)
+
+
+
+// Функция получения количества записей в логах
+int getLogsCount() {
+    char sql[100];
+    snprintf(sql, sizeof(sql), "SELECT COUNT(*) FROM Logs WHERE Simulation_id = %ld;", simulationId);
+    int count = 0;
+    rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
+    if (rc == SQLITE_OK && sqlite3_step(res) == SQLITE_ROW) {
+        count = sqlite3_column_int(res, 0);
+    }
+    sqlite3_finalize(res);
+    return count;
+}
+
+// HTML главной страницы
+void handleRoot() {
+    String html = "<!DOCTYPE html><html><head>";
+    html += "<meta charset='UTF-8'>";
+    html += "<title>Robot Controller " + String(CONTROLLER_ID) + "</title>";
+    html += "<style>";
+    html += "body{font-family:Arial;margin:20px}";
+    html += "table{border-collapse:collapse;width:100%}";
+    html += "th,td{border:1px solid #ddd;padding:8px;text-align:left}";
+    html += "tr:nth-child(even){background-color:#f2f2f2}";
+    html += ".success{color:green}.error{color:red}";
+    html += "</style>";
+    html += "</head><body>";
+    
+    html += "<h1>Robot Controller #" + String(CONTROLLER_ID) + "</h1>";
+    html += "<p>Simulation ID: <strong>" + String(simulationId) + "</strong></p>";
+    html += "<p>Logs: <strong>" + String(getLogsCount()) + "</strong> records</p>";
+    
+    // Кнопки управления
+    html += "<button onclick='sendCommand(1)'>▶ START</button> ";
+    html += "<button onclick='sendCommand(0)'>⏹ STOP</button>";
+    html += "<button onclick='location.href=\"/logs\"'>📊 View Logs</button>";
+    html += "<button onclick='location.href=\"/logs/csv\"'>📥 Export CSV</button>";
+    
+    // JavaScript для отправки команд
+    html += "<script>";
+    html += "function sendCommand(cmd){";
+    html += "fetch('/command?cmd='+cmd).then(r=>r.text()).then(console.log);";
+    html += "}</script>";
+    
+    html += "</body></html>";
+    server.send(200, "text/html", html);
+}
+
+// Страница с логами
+void handleLogs() {
+    String html = "<!DOCTYPE html><html><head>";
+    html += "<meta charset='UTF-8'>";
+    html += "<title>Logs - Controller " + String(CONTROLLER_ID) + "</title>";
+    html += "<style>body{font-family:Arial;margin:20px}";
+    html += "table{border-collapse:collapse;width:100%}";
+    html += "th,td{border:1px solid #ddd;padding:8px;text-align:left}";
+    html += "</style></head><body>";
+    
+    html += "<h1>Movement Logs (Controller #" + String(CONTROLLER_ID) + ")</h1>";
+    html += "<a href='/'>← Back</a><br><br>";
+    html += "<td><tr><th>ID</th><th>Vector ID</th><th>Need W</th><th>Fact W</th><th>Time</th></tr>";
+    
+    char sql[200];
+    snprintf(sql, sizeof(sql), 
+             "SELECT Id, Vector_id, Need_w, Fact_w, Created_at FROM Logs WHERE Simulation_id = %ld ORDER BY Id DESC LIMIT 500;",
+             simulationId);
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
+    if (rc == SQLITE_OK) {
+        while (sqlite3_step(res) == SQLITE_ROW) {
+            html += "<tr>";
+            html += "<td>" + String(sqlite3_column_int(res, 0)) + "</td>";
+            html += "<td>" + String(sqlite3_column_int(res, 1)) + "</td>";
+            html += "<td>" + String(sqlite3_column_double(res, 2)) + "</td>";
+            html += "<td>" + String(sqlite3_column_double(res, 3)) + "</td>";
+            html += "<td>" + String((const char*)sqlite3_column_text(res, 4)) + "</td>";
+            html += "</tr>";
+        }
+        sqlite3_finalize(res);
+    }
+    
+    html += "</table></body></html>";
+    server.send(200, "text/html", html);
+}
+
+// Экспорт в CSV
+void handleLogsCSV() {
+    String csv = "Id,VectorId,NeedW,FactW,Time\n";
+    
+    char sql[200];
+    snprintf(sql, sizeof(sql), 
+             "SELECT Id, Vector_id, Need_w, Fact_w, Created_at FROM Logs WHERE Simulation_id = %ld ORDER BY Id;",
+             simulationId);
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
+    if (rc == SQLITE_OK) {
+        while (sqlite3_step(res) == SQLITE_ROW) {
+            csv += String(sqlite3_column_int(res, 0)) + ",";
+            csv += String(sqlite3_column_int(res, 1)) + ",";
+            csv += String(sqlite3_column_double(res, 2)) + ",";
+            csv += String(sqlite3_column_double(res, 3)) + ",";
+            csv += String((const char*)sqlite3_column_text(res, 4)) + "\n";
+        }
+        sqlite3_finalize(res);
+    }
+    
+    server.send(200, "text/csv", csv);
+}
+
+// API для команд
+void handleCommand() {
+    if (server.hasArg("cmd")) {
+        int cmd = server.arg("cmd").toInt();
+        if (cmd == 1) {
+            startMovement();
+            server.send(200, "text/plain", "START command sent");
+        } else if (cmd == 0) {
+            stopMovement();
+            server.send(200, "text/plain", "STOP command sent");
+        } else {
+            server.send(400, "text/plain", "Unknown command");
+        }
+    } else {
+        server.send(400, "text/plain", "Missing cmd parameter");
+    }
 }
