@@ -34,6 +34,10 @@ WebServer server(80);
 
 Ticker timerPID;              //Таймер ПИД-регулятора
 
+double r = 0.04;        //Радиус Mecanum-колеса,
+double lx = 0.055;      //Расстояние от продольной оси шасси до продольной линии опоры колес, м
+double ly = 0.1;
+
 // Структура для хранения UDP-пакета
 struct QueuedPacket {
     char data[600];  // Буфер приема пакетов UDP
@@ -64,7 +68,7 @@ A REAL NOT NULL, W REAL NOT NULL, T REAL NOT NULL, Created_at DATETIME DEFAULT C
 const char sqlDropVectors[] = "DROP TABLE IF EXISTS Vectors";
 
 const char sqlCreateLogs[] = \
-"CREATE TABLE IF NOT EXISTS Logs (Id INTEGER PRIMARY KEY AUTOINCREMENT, Simulation_id INTEGER NOT NULL, Vector_id INTEGER NOT NULL, Need_w REAL NOT NULL, Fact_w REAL NOT NULL, Created_at DATETIME DEFAULT CURRENT_TIMESTAMP);";
+"CREATE TABLE IF NOT EXISTS Logs (Id INTEGER PRIMARY KEY AUTOINCREMENT, Simulation_id INTEGER NOT NULL, Vector_id INTEGER NOT NULL, Need_w REAL NOT NULL, Fact_w REAL NOT NULL, Wheel_number INTEGER, Created_at DATETIME DEFAULT CURRENT_TIMESTAMP);";
 
 const char sqlDropLogs[] = "DROP TABLE IF EXISTS Logs";
 
@@ -82,8 +86,10 @@ vector_t actualVector;
 volatile bool inMovement = false;      // Флаг движения
 uint32_t currentVectorId = 0;          // ID текущего вектора
 uint32_t previousVectorId = 0;         // ID предыдущего вектора (для логов)
-float lastNeedW = 0;                   // Последняя заданная мощность двигателя (или скорость)
-float lastFactW = 0;                   // Последняя фактическая мощность двигателя (или скорость)
+float lastNeedWL = 0;                   // Последняя заданная мощность левого двигателя (или скорость)
+float lastFactWL = 0;                   // Последняя фактическая мощность левого двигателя (или скорость)
+float lastNeedWR = 0;                   // Последняя заданная мощность правого двигателя (или скорость)
+float lastFactWR = 0;                   // Последняя фактическая мощность правого двигателя (или скорость)
 
 // Параметры вектора для воспроизведения
 float currentV, currentA, currentW, currentT;
@@ -277,50 +283,19 @@ void timer_ISR(){
 
 // Функции управления колесами (заглушки - реализовать позже)
 void setWheelSpeeds(float V, float A, float W) {
-    // TODO: рассчитать скорости для 12 колес и отправить на драйверы
-    // Пока просто выводим в Serial
-
-    // double A1 = 0;
-    // double Vx1 = V * cos(A-A1);
-    // double Vy1= V * sin(A-A1);
-
-    // -Vx1-Vy1-W
-    // -Vx1+Vy1-W
-    // -Vx1-Vy1+W
-    // -Vx1+Vy1+W
-
     double A2 = 3.14159265 / 3;
     double Vx2 = V * cos(A-A2);
     double Vy2 = V * sin(A-A2);
 
     // Левое колесо (5)
-    lastNeedW = -Vx2-Vy2-W;
-    Serial.println(lastNeedW);
-    LeftMotor.setOmega(lastNeedW);
+    lastNeedWL = (-Vx2-Vy2-(lx+ly)*W) / r;
+    Serial.println(lastNeedWL);
+    LeftMotor.setOmega(lastNeedWL);
 
     // Правое колесо (6)
-    lastNeedW = -Vx2+Vy2-W;
-    //Serial.println(lastNeedW);
-    RightMotor.setOmega(lastNeedW);
-
-
-    // -Vx2-Vy2-W
-    // -Vx2+Vy2-W
-    // -Vx2-Vy2+W
-    // -Vx2+Vy2+W
-
-    // double A3 = 2 * 3.14 / 3;
-    // double Vx3 = V * cos(A-A3);
-    // double Vy3 = V * sin(A-A3);
-
-    // -Vx3-Vy3-W
-    // -Vx3+Vy3-W
-    // -Vx3-Vy3+W
-    // -Vx3+Vy3+W
-
-    //BackLeftMotor.setOmega(lbW); 
-
-
+    lastNeedWR = (-Vx2+Vy2-(lx+ly)*W) / r;
+    //Serial.println(lastNeedWR);
+    RightMotor.setOmega(lastNeedWR);
 
     //Serial.printf("setWheelSpeeds: V=%.3f, A=%.3f, W=%.3f\n", V, A, W);
 }
@@ -330,12 +305,6 @@ void stopAllWheels() {
     LeftMotor.setOmega(0);
     RightMotor.setOmega(0);
     Serial.println("stopAllWheels: Моторы остановлены");
-}
-
-float getCurrentWheelSpeed() {
-    // TODO: получить фактическую угловую скорость с энкодеров
-    // Пока возвращаем 0
-    return 0.0;
 }
 
 //Процедура инициализации программно-аппаратных средств управления модулем (внешним) памяти стенда
@@ -407,6 +376,29 @@ bool loadFirstVector() {
     return false;
 }
 
+// Загрузка последней сохраненной траектории
+bool loadLastTrajectory() {
+    char sql[200];
+    snprintf(sql, sizeof(sql), 
+             "SELECT Simulation_id FROM Vectors ORDER BY Id DESC LIMIT 1");
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
+    if (rc != SQLITE_OK) {
+        return false;
+    }
+    
+    if (sqlite3_step(res) == SQLITE_ROW) {
+        simulationId = sqlite3_column_int(res, 0);
+        sqlite3_finalize(res);
+        Serial.printf("Загружена последняя траектория: Simulation_id = %ld\n", simulationId);
+        return true;
+    }
+    
+    sqlite3_finalize(res);
+    Serial.println("Нет сохранённых траекторий в БД");
+    return false;
+}
+
 // Загрузка следующего вектора по ID (без String)
 bool loadNextVector() {
     char sql[160];
@@ -441,11 +433,11 @@ bool loadNextVector() {
 }
 
 // Логирование
-bool logMovement(uint32_t vectorId, float needW, float factW) {
+bool logMovement(uint32_t vectorId, float needW, float factW, uint32_t wheelNumber) {
     char sql[256];
     snprintf(sql, sizeof(sql), 
-             "INSERT INTO Logs (Simulation_id, Vector_id, Need_w, Fact_w) VALUES (%ld, %u, %.6f, %.6f);",
-             simulationId, vectorId, needW, factW);
+             "INSERT INTO Logs (Simulation_id, Vector_id, Need_w, Fact_w, Wheel_number) VALUES (%ld, %u, %.6f, %.6f, %u);",
+             simulationId, vectorId, needW, factW, wheelNumber);
     
     rc = sqlite3_exec(db, sql, NULL, NULL, &zErrMsg);
     if (rc != SQLITE_OK) {
@@ -465,8 +457,10 @@ void processMovement() {
     if (vectorElapsedTime >= currentT) {
         // Логируем текущий вектор перед его завершением
         if (currentVectorId != 0) {
-            lastFactW = getCurrentWheelSpeed();  // Получаем реальную скорость
-            logMovement(currentVectorId, lastNeedW, lastFactW);
+            lastFactWL = LeftMotor.getOmega();  // Получаем реальную скорость левого колеса
+            lastFactWR = RightMotor.getOmega();  // Получаем реальную скорость правого колеса
+            logMovement(currentVectorId, lastNeedWL, lastFactWL, 1);
+            logMovement(currentVectorId, lastNeedWR, lastFactWR, 2);
         }
 
         if (!loadNextVector()) {
@@ -656,8 +650,10 @@ void startMovement() {
     
     currentVectorId = 0;
     previousVectorId = 0;
-    lastNeedW = 0;
-    lastFactW = 0;
+    lastNeedWL = 0;
+    lastFactWL = 0;
+    lastNeedWR = 0;
+    lastFactWR = 0;
     
     if (!loadFirstVector()) {
         Serial.println("Ошибка: не найдены вектора для симуляции");
@@ -685,15 +681,19 @@ void stopMovement() {
     
     // Логируем последний вектор, если есть
     if (currentVectorId != 0) {
-        lastFactW = getCurrentWheelSpeed();
-        logMovement(currentVectorId, lastNeedW, lastFactW);
+        lastFactWL = LeftMotor.getOmega();  // Получаем реальную скорость левого колеса
+        lastFactWR = RightMotor.getOmega();  // Получаем реальную скорость правого колеса
+        logMovement(currentVectorId, lastNeedWL, lastFactWL, 1);
+        logMovement(currentVectorId, lastNeedWR, lastFactWR, 2);
     }
     
     // Сбрасываем указатели
     currentVectorId = 0;
     previousVectorId = 0;
-    lastNeedW = 0;
-    lastFactW = 0;
+    lastNeedWL = 0;
+    lastFactWL = 0;
+    lastNeedWR = 0;
+    lastFactWR = 0;
     
     Serial.println("Движение остановлено");
 }
@@ -716,6 +716,8 @@ void setup() {
         Serial.println("База данных готова к работе");
         Serial.flush();
     }
+    // Загружаем последнюю сохраненную траекторию
+    loadLastTrajectory();
 
     // Проверка: сколько векторов в БД
     // char sql[100];
@@ -767,9 +769,9 @@ void setup() {
     
   Serial.println("Готов к приему траекторий");
 
-  //LeftMotor.setEncoderISR(ISR_LeftEncA,ISR_LeftEncB);
+  LeftMotor.setEncoderISR(ISR_LeftEncA,ISR_LeftEncB);
   //Назначение энкодеру заднего правого колеса глобальных callback-функций
-  //RightMotor.setEncoderISR(ISR_RightEncA,ISR_RightEncB);
+  RightMotor.setEncoderISR(ISR_RightEncA,ISR_RightEncB);
   //Запуск таймера с периодом 1 мс для регулярного контроля скорости колес 
   timerPID.attach(0.01,timer_ISR);
   //LeftMotor.setOmega(1); 
@@ -868,15 +870,20 @@ void handleLogs() {
     html += "<style>body{font-family:Arial;margin:20px}";
     html += "table{border-collapse:collapse;width:100%}";
     html += "th,td{border:1px solid #ddd;padding:8px;text-align:left}";
+    html += "tr:nth-child(even){background-color:#f2f2f2}";
     html += "</style></head><body>";
     
     html += "<h1>Movement Logs (Controller #" + String(CONTROLLER_ID) + ")</h1>";
     html += "<a href='/'>← Back</a><br><br>";
-    html += "<td><tr><th>ID</th><th>Vector ID</th><th>Need W</th><th>Fact W</th><th>Time</th></tr>";
+    
+    html += "<table>";
+    html += "<thead><tr>";
+    html += "<th>ID</th><th>Vector ID</th><th>Need W</th><th>Fact W</th><th>Wheel Number</th><th>Time</th>";
+    html += "</tr></thead><tbody>";
     
     char sql[200];
     snprintf(sql, sizeof(sql), 
-             "SELECT Id, Vector_id, Need_w, Fact_w, Created_at FROM Logs WHERE Simulation_id = %ld ORDER BY Id DESC LIMIT 500;",
+             "SELECT Id, Vector_id, Need_w, Fact_w, Wheel_number, Created_at FROM Logs WHERE Simulation_id = %ld ORDER BY Id DESC LIMIT 500;",
              simulationId);
     
     rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
@@ -887,33 +894,36 @@ void handleLogs() {
             html += "<td>" + String(sqlite3_column_int(res, 1)) + "</td>";
             html += "<td>" + String(sqlite3_column_double(res, 2)) + "</td>";
             html += "<td>" + String(sqlite3_column_double(res, 3)) + "</td>";
-            html += "<td>" + String((const char*)sqlite3_column_text(res, 4)) + "</td>";
+            html += "<td>" + String(sqlite3_column_int(res, 4)) + "</td>";  // Wheel number
+            html += "<td>" + String((const char*)sqlite3_column_text(res, 5)) + "</td>";
             html += "</tr>";
         }
         sqlite3_finalize(res);
     }
     
-    html += "</table></body></html>";
+    html += "</tbody></table></body></html>";
     server.send(200, "text/html", html);
 }
 
 // Экспорт в CSV
 void handleLogsCSV() {
-    String csv = "Id,VectorId,NeedW,FactW,Time\n";
+    // Заголовок CSV с WheelNumber
+    String csv = "Id,VectorId,NeedW,FactW,WheelNumber,Time\n";
     
     char sql[200];
     snprintf(sql, sizeof(sql), 
-             "SELECT Id, Vector_id, Need_w, Fact_w, Created_at FROM Logs WHERE Simulation_id = %ld ORDER BY Id;",
+             "SELECT Id, Vector_id, Need_w, Fact_w, Wheel_number, Created_at FROM Logs WHERE Simulation_id = %ld ORDER BY Id;",
              simulationId);
     
     rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
     if (rc == SQLITE_OK) {
         while (sqlite3_step(res) == SQLITE_ROW) {
-            csv += String(sqlite3_column_int(res, 0)) + ",";
-            csv += String(sqlite3_column_int(res, 1)) + ",";
-            csv += String(sqlite3_column_double(res, 2)) + ",";
-            csv += String(sqlite3_column_double(res, 3)) + ",";
-            csv += String((const char*)sqlite3_column_text(res, 4)) + "\n";
+            csv += String(sqlite3_column_int(res, 0)) + ",";   // Id
+            csv += String(sqlite3_column_int(res, 1)) + ",";   // Vector_id
+            csv += String(sqlite3_column_double(res, 2)) + ","; // Need_w
+            csv += String(sqlite3_column_double(res, 3)) + ","; // Fact_w
+            csv += String(sqlite3_column_int(res, 4)) + ",";    // Wheel_number
+            csv += String((const char*)sqlite3_column_text(res, 5)) + "\n"; // Created_at
         }
         sqlite3_finalize(res);
     }
