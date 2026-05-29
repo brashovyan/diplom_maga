@@ -147,6 +147,9 @@ Motor::Motor(uint8_t pin_Forward, uint8_t pin_Reverse, uint8_t pin_EncA, uint8_t
   dt=0x7fffffff;            //Временной интервал между прерываниями энкодера: инициализация максимально возможным значением
   timeA=timeB=micros();     //Время крайнего прерывания на каналах (А и В) энкодера
   countTickEnc=0;           //Количество шагов (stepAngle) в повороте колеса
+  // Эти значения жестко отличаются от Pico W
+  //stepAngle=PI/620; 
+  // И нет Kp_angle с Kd_angle
   stepAngle=PI/1850;        //Шаг угла поворота колеса между прерываниями на одном канале квадратурного энкодера
   Kp_omega=200;             //Коэффициент пропорционального регулятора угловой скорости
   Ki_omega=1000;            //Коэффициент интегрального регулятора угловой скорости
@@ -206,6 +209,11 @@ void Motor::setOmega(double omega){
     t0=micros();
     angle0=countTickEnc*stepAngle;
     desiredOmega=omega;
+
+    // Отличается от Pico W
+    // countTickEnc=0;
+    // t0=micros();
+    // desiredOmega=omega;
 }
 
 void Motor::setPosition(double pos){
@@ -245,6 +253,10 @@ void Motor::ControlOmega(){
     setPower(Kp_angle*(angle0-angle)+Kd_angle*(prevAngle-angle));   //ПД-регулятор углового положения 
   }
   prevAngle=angle;
+
+  // В pico W чуть по другому
+  // double t=(micros()-t0)/1e6;
+  // setPower(Kp_omega*(desiredOmega-getOmega())+Ki_omega*(desiredOmega*t-getAngle()));
 }
 //================================================================================================================
 
@@ -298,6 +310,19 @@ void setWheelSpeeds(float V, float A, float W) {
     RightMotor.setOmega(lastNeedWR);
 
     //Serial.printf("setWheelSpeeds: V=%.3f, A=%.3f, W=%.3f\n", V, A, W);
+
+    // Установка скорости в Pico W
+    // double Vx = Speed * cos(Alpha);
+    // double Vy = Speed * sin(Alpha);
+    // double lfW=(Vx-Vy-(lx+ly)*Omega)/r;
+    // double rfW=(Vx+Vy+(lx+ly)*Omega)/r;
+    // double lbW=(Vx+Vy-(lx+ly)*Omega)/r;
+    // double rbW=(Vx-Vy+(lx+ly)*Omega)/r;
+    // //Настройка ПИД-регуляторов колес 
+    // BackLeftMotor.setOmega(lbW); 
+    // BackRightMotor.setOmega(rbW);
+    // ForwardLeftMotor.setOmega(lfW);
+    // ForwardRightMotor.setOmega(rfW);
 }
 
 void stopAllWheels() {
