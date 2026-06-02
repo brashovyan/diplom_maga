@@ -3,7 +3,8 @@
 #include <SD.h>                   //Включение в проект библиотеки для модулем SD-карты
 #include <FS.h>                   //Включение в проект библиотеки для поддержки файловой системы
 #include <sqlite3.h>              //Включение в проект библиотеки драйвера SQLite3
-#include <SPI.h>                  //Включение в проект библиотеки для управления внутренним модулем SPI          
+#include <SPI.h>                  //Включение в проект библиотеки для управления внутренним модулем SPI      
+#include "WebFace.h"  
 
 #define CS_SD_PIN 5              //Пин SD карты
 
@@ -16,6 +17,7 @@
 #include <ESPmDNS.h>
 
 WebServer server(80);
+WiFiUDP udpWiFi;
 
 #include <Ticker.h>
 
@@ -97,6 +99,17 @@ float vectorStartTime = 0;             // Время начала текущег
 float vectorElapsedTime = 0;           // Прошедшее время текущего вектора
 uint32_t lastMovementTime = 0;        // Время последнего обновления движения
 const uint32_t MOVEMENT_INTERVAL_MS = 10;  // 10 мс = 100 Гц
+
+// Глобальные переменные
+float lastSpeed = 0;
+float lastAngle = 0;
+float lastOmega = 0;
+double speed_Move = 0;      //Модуль скорости поступательного движения
+double angle_Move = 0;      //Направление поступательного движения
+double omega_Rotation = 0;  //Угловая скорость вращения Omnibot
+unsigned long lastCommandTime = 0;
+bool isReceivingCommands = false;
+const unsigned long COMMAND_TIMEOUT_MS = 500;  // 0.5 секунд без команд → стоп
 //===================================================================================================
 
 //Класс управления мотором постоянного тока (JGB37-520)
@@ -575,6 +588,21 @@ void parsePacket(char* data, int len) {
         } else if (command == 0) {
             stopMovement();
         }
+        else if (command == 3) {
+            // Формат: "3;V;A;W;"
+            char* ptr = buffer + 2;  // пропускаем "3;"
+            
+            float V = strtof(ptr, &ptr);
+            if (*ptr == ';') ptr++;
+            float A = strtof(ptr, &ptr);
+            if (*ptr == ';') ptr++;
+            float W = strtof(ptr, &ptr);
+            
+            setWheelSpeeds(V, A, W);
+            lastCommandTime = millis();
+            isReceivingCommands = true;
+        }
+
         return;
     }
     
@@ -769,6 +797,63 @@ void setup() {
   server.on("/command", handleCommand);
   server.on("/trajectories", handleTrajectories);
   server.on("/select", handleSelectTrajectory);
+  server.on("/joystick", []() {
+      server.send(200, "text/html", WEB_INDEX_HTML);
+  });
+
+  // Для обработчика движения
+  server.on("/motion", []() {
+      if (server.hasArg("x") && server.hasArg("y")) {
+          float x = server.arg("x").toFloat();
+          float y = server.arg("y").toFloat();
+          
+          float speed = sqrt(x * x + y * y);
+          float angle = atan2(y, x);
+          
+          const float MAX_SPEED = 0.5;
+          speed_Move = speed * MAX_SPEED;
+          
+          lastSpeed = speed;
+          lastAngle = angle;
+          
+          float omega = lastOmega;
+          
+         char packet[50];
+          snprintf(packet, sizeof(packet), "command;3;%.3f;%.3f;%.3f;", speed, angle, omega);
+
+          // Правильный способ отправки через WiFiUDP:
+          udpWiFi.beginPacket(groupIP, portUDP);
+          udpFiWi.write((const uint8_t*)packet, strlen(packet));
+          udpWiFi.endPacket();
+          
+          server.send(200, "text/plain", "OK");
+      } else {
+          server.send(400, "text/plain", "Missing parameters");
+      }
+  });
+
+  // Для обработчика поворота
+  server.on("/rotation", []() {
+      if (server.hasArg("rot")) {
+          float rot = server.arg("rot").toFloat();
+          
+          const float MAX_OMEGA = 2.0;
+          float omega = (rot / 100.0) * MAX_OMEGA;
+          lastOmega = omega;
+          
+         char packet[50];
+          snprintf(packet, sizeof(packet), "command;3;%.3f;%.3f;%.3f;", speed, angle, omega);
+
+          // Правильный способ отправки через WiFiUDP:
+          udpWiFi.beginPacket(groupIP, portUDP);
+          udpWiFi.write((const uint8_t*)packet, strlen(packet));
+          udpWiFi.endPacket();
+          
+          server.send(200, "text/plain", "OK");
+      } else {
+          server.send(400, "text/plain", "Missing parameters");
+      }
+  });
   server.begin();
     
   Serial.println("Готов к приему траекторий");
@@ -807,6 +892,13 @@ void loop() {
         }
     }
 
+    if (isReceivingCommands && (millis() - lastCommandTime > COMMAND_TIMEOUT_MS)) {
+        // Команды перестали приходить → останавливаемся
+        setWheelSpeeds(0, 0, 0);
+        isReceivingCommands = false;
+        Serial.println("Команды перестали поступать, остановка");
+    }
+
     // Слушаем обращения к веб серверу логов
     server.handleClient();
     
@@ -843,6 +935,8 @@ void handleRoot() {
     html += "th,td{border:1px solid #ddd;padding:8px;text-align:left}";
     html += "tr:nth-child(even){background-color:#f2f2f2}";
     html += ".success{color:green}.error{color:red}";
+    html += "button{padding:10px 15px;margin:5px;cursor:pointer}";
+    html += ".joystick-btn{background:#e94560;color:white}";
     html += "</style>";
     html += "</head><body>";
     
@@ -855,6 +949,7 @@ void handleRoot() {
     html += "<button onclick='sendCommand(0)'>⏹ STOP</button>";
     html += "<button onclick='location.href=\"/logs\"'>📊 View Logs</button>";
     html += "<button onclick='location.href=\"/logs/csv\"'>📥 Export CSV</button>";
+    html += "<button class='joystick-btn' onclick='location.href=\"/joystick\"'>🎮 Joystick Control</button>";  // ← НОВАЯ КНОПКА
     
     // JavaScript для отправки команд
     html += "<script>";
@@ -1039,3 +1134,4 @@ void handleCommand() {
         server.send(400, "text/plain", "Missing cmd parameter");
     }
 }
+
