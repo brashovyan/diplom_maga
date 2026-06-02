@@ -862,20 +862,18 @@ void setup() {
           float speed = sqrt(x * x + y * y);
           float angle = atan2(y, x);
           
-          const float MAX_SPEED = 0.5;
+          const float MAX_SPEED = 1;
           speed_Move = speed * MAX_SPEED;
           
           lastSpeed = speed;
           lastAngle = angle;
           
-          float omega = lastOmega;
-          
          char packet[50];
-          snprintf(packet, sizeof(packet), "command;3;%.3f;%.3f;%.3f;", speed, angle, omega);
+          snprintf(packet, sizeof(packet), "command;3;%.3f;%.3f;%.3f;", lastSpeed, lastAngle, lastOmega);
 
           // Правильный способ отправки через WiFiUDP:
           udpWiFi.beginPacket(groupIP, portUDP);
-          udpFiWi.write((const uint8_t*)packet, strlen(packet));
+          udpWiFi.write((const uint8_t*)packet, strlen(packet));
           udpWiFi.endPacket();
           
           server.send(200, "text/plain", "OK");
@@ -894,7 +892,7 @@ void setup() {
           lastOmega = omega;
           
          char packet[50];
-          snprintf(packet, sizeof(packet), "command;3;%.3f;%.3f;%.3f;", speed, angle, omega);
+          snprintf(packet, sizeof(packet), "command;3;%.3f;%.3f;%.3f;", lastSpeed, lastAngle, lastOmega);
 
           // Правильный способ отправки через WiFiUDP:
           udpWiFi.beginPacket(groupIP, portUDP);
