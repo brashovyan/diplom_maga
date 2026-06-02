@@ -283,19 +283,71 @@ void timer_ISR(){
 
 // Функции управления колесами (заглушки - реализовать позже)
 void setWheelSpeeds(float V, float A, float W) {
-    double A2 = 3.14159265 / 3;
+    // Колеса 1 и 2
+    double A2 = 0;
     double Vx2 = V * cos(A-A2);
     double Vy2 = V * sin(A-A2);
-
-    // Право колесо (5)
+    // Право колесо (1)
     lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
-    //Serial.println(lastNeedWL);
     RightMotor.setOmega(lastNeedWR);
-
-    // Левое колесо (6)
+    // Левое колесо (2)
     lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
-    //Serial.println(lastNeedWR);
     LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 3 и 4
+    // double A2 = 0;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (1)
+    // lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (2)
+    // lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 5 и 6
+    // double A2 = 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (5)
+    // lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (6)
+    // lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 7 и 8
+    // double A2 = 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (7)
+    // lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (8)
+    // lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 9 и 10
+    // double A2 = 2 * 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (9)
+    // lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (10)
+    // lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 11 и 12
+    // double A2 = 2 * 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (11)
+    // lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (12)
+    // lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
 
     //Serial.printf("setWheelSpeeds: V=%.3f, A=%.3f, W=%.3f\n", V, A, W);
 }
