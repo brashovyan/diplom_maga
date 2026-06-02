@@ -3,7 +3,8 @@
 #include <SD.h>                   //Включение в проект библиотеки для модулем SD-карты
 #include <FS.h>                   //Включение в проект библиотеки для поддержки файловой системы
 #include <sqlite3.h>              //Включение в проект библиотеки драйвера SQLite3
-#include <SPI.h>                  //Включение в проект библиотеки для управления внутренним модулем SPI          
+#include <SPI.h>                  //Включение в проект библиотеки для управления внутренним модулем SPI      
+#include "WebFace.h"  
 
 #define CS_SD_PIN 5              //Пин SD карты
 
@@ -16,6 +17,7 @@
 #include <ESPmDNS.h>
 
 WebServer server(80);
+WiFiUDP udpWiFi;
 
 #include <Ticker.h>
 
@@ -34,7 +36,7 @@ WebServer server(80);
 
 Ticker timerPID;              //Таймер ПИД-регулятора
 
-double r = 0.04;        //Радиус Mecanum-колеса,
+double r = 0.045;        //Радиус Mecanum-колеса,
 double lx = 0.055;      //Расстояние от продольной оси шасси до продольной линии опоры колес, м
 double ly = 0.1;
 
@@ -63,12 +65,12 @@ char *zErrMsg = 0;    //Переменная для получения инфо�
 // Глобальные SQL-запросы (хранятся во flash, не в ОЗУ)
 const char sqlCreateVectors[] = \
 "CREATE TABLE IF NOT EXISTS Vectors (Id INTEGER PRIMARY KEY AUTOINCREMENT, Simulation_id INTEGER NOT NULL, V REAL NOT NULL, \
-A REAL NOT NULL, W REAL NOT NULL, T REAL NOT NULL, Created_at DATETIME DEFAULT CURRENT_TIMESTAMP);";
+A REAL NOT NULL, W REAL NOT NULL, T REAL NOT NULL);";
 
 const char sqlDropVectors[] = "DROP TABLE IF EXISTS Vectors";
 
 const char sqlCreateLogs[] = \
-"CREATE TABLE IF NOT EXISTS Logs (Id INTEGER PRIMARY KEY AUTOINCREMENT, Simulation_id INTEGER NOT NULL, Vector_id INTEGER NOT NULL, Need_w REAL NOT NULL, Fact_w REAL NOT NULL, Wheel_number INTEGER, Created_at DATETIME DEFAULT CURRENT_TIMESTAMP);";
+"CREATE TABLE IF NOT EXISTS Logs (Id INTEGER PRIMARY KEY AUTOINCREMENT, Simulation_id INTEGER NOT NULL, Vector_id INTEGER NOT NULL, Need_w REAL NOT NULL, Fact_w REAL NOT NULL, Wheel_number INTEGER);";
 
 const char sqlDropLogs[] = "DROP TABLE IF EXISTS Logs";
 
@@ -97,6 +99,17 @@ float vectorStartTime = 0;             // Время начала текущег
 float vectorElapsedTime = 0;           // Прошедшее время текущего вектора
 uint32_t lastMovementTime = 0;        // Время последнего обновления движения
 const uint32_t MOVEMENT_INTERVAL_MS = 10;  // 10 мс = 100 Гц
+
+// Глобальные переменные
+float lastSpeed = 0;
+float lastAngle = 0;
+float lastOmega = 0;
+double speed_Move = 0;      //Модуль скорости поступательного движения
+double angle_Move = 0;      //Направление поступательного движения
+double omega_Rotation = 0;  //Угловая скорость вращения Omnibot
+unsigned long lastCommandTime = 0;
+bool isReceivingCommands = false;
+const unsigned long COMMAND_TIMEOUT_MS = 500;  // 0.5 секунд без команд → стоп
 //===================================================================================================
 
 //Класс управления мотором постоянного тока (JGB37-520)
@@ -147,14 +160,11 @@ Motor::Motor(uint8_t pin_Forward, uint8_t pin_Reverse, uint8_t pin_EncA, uint8_t
   dt=0x7fffffff;            //Временной интервал между прерываниями энкодера: инициализация максимально возможным значением
   timeA=timeB=micros();     //Время крайнего прерывания на каналах (А и В) энкодера
   countTickEnc=0;           //Количество шагов (stepAngle) в повороте колеса
-  // Эти значения жестко отличаются от Pico W
-  //stepAngle=PI/620; 
-  // И нет Kp_angle с Kd_angle
-  stepAngle=PI/1850;        //Шаг угла поворота колеса между прерываниями на одном канале квадратурного энкодера
-  Kp_omega=200;             //Коэффициент пропорционального регулятора угловой скорости
-  Ki_omega=1000;            //Коэффициент интегрального регулятора угловой скорости
-  Kp_angle=4000;            //Коэффициент пропорционального регулятора угла
-  Kd_angle=1e5;             //Коэффициент дифференциального регулятора угла
+  stepAngle=PI/550;        //Шаг угла поворота колеса между прерываниями на одном канале квадратурного энкодера
+  Kp_omega=2.5;             //Коэффициент пропорционального регулятора угловой скорости
+  Ki_omega=0.3;            //Коэффициент интегрального регулятора угловой скорости
+  Kp_angle=60;            //Коэффициент пропорционального регулятора угла
+  Kd_angle=20;             //Коэффициент дифференциального регулятора угла
   desiredOmega=0;           //Желаемое значение угловой скорости колеса в радианах
   t0=timeA;                 //Время в момент изменения желаемой скорости
   angle0=prevAngle=0;       //Угол поворота оси в момент измененияя желаемой скорости                 
@@ -209,11 +219,6 @@ void Motor::setOmega(double omega){
     t0=micros();
     angle0=countTickEnc*stepAngle;
     desiredOmega=omega;
-
-    // Отличается от Pico W
-    // countTickEnc=0;
-    // t0=micros();
-    // desiredOmega=omega;
 }
 
 void Motor::setPosition(double pos){
@@ -253,10 +258,6 @@ void Motor::ControlOmega(){
     setPower(Kp_angle*(angle0-angle)+Kd_angle*(prevAngle-angle));   //ПД-регулятор углового положения 
   }
   prevAngle=angle;
-
-  // В pico W чуть по другому
-  // double t=(micros()-t0)/1e6;
-  // setPower(Kp_omega*(desiredOmega-getOmega())+Ki_omega*(desiredOmega*t-getAngle()));
 }
 //================================================================================================================
 
@@ -295,34 +296,73 @@ void timer_ISR(){
 
 // Функции управления колесами (заглушки - реализовать позже)
 void setWheelSpeeds(float V, float A, float W) {
-    double A2 = 3.14159265 / 3;
+    // Колеса 1 и 2
+    double A2 = 0;
     double Vx2 = V * cos(A-A2);
     double Vy2 = V * sin(A-A2);
-
-    // Левое колесо (5)
-    lastNeedWL = (-Vx2-Vy2-(lx+ly)*W) / r;
-    Serial.println(lastNeedWL);
+    // Право колесо (1)
+    lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    RightMotor.setOmega(lastNeedWR);
+    // Левое колесо (2)
+    lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
     LeftMotor.setOmega(lastNeedWL);
 
-    // Правое колесо (6)
-    lastNeedWR = (-Vx2+Vy2-(lx+ly)*W) / r;
-    //Serial.println(lastNeedWR);
-    RightMotor.setOmega(lastNeedWR);
+    // // Колеса 3 и 4
+    // double A2 = 0;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (1)
+    // lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (2)
+    // lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 5 и 6
+    // double A2 = 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (5)
+    // lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (6)
+    // lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 7 и 8
+    // double A2 = 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (7)
+    // lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (8)
+    // lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 9 и 10
+    // double A2 = 2 * 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (9)
+    // lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (10)
+    // lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 11 и 12
+    // double A2 = 2 * 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (11)
+    // lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (12)
+    // lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // LeftMotor.setOmega(lastNeedWL);
 
     //Serial.printf("setWheelSpeeds: V=%.3f, A=%.3f, W=%.3f\n", V, A, W);
-
-    // Установка скорости в Pico W
-    // double Vx = Speed * cos(Alpha);
-    // double Vy = Speed * sin(Alpha);
-    // double lfW=(Vx-Vy-(lx+ly)*Omega)/r;
-    // double rfW=(Vx+Vy+(lx+ly)*Omega)/r;
-    // double lbW=(Vx+Vy-(lx+ly)*Omega)/r;
-    // double rbW=(Vx-Vy+(lx+ly)*Omega)/r;
-    // //Настройка ПИД-регуляторов колес 
-    // BackLeftMotor.setOmega(lbW); 
-    // BackRightMotor.setOmega(rbW);
-    // ForwardLeftMotor.setOmega(lfW);
-    // ForwardRightMotor.setOmega(rfW);
 }
 
 void stopAllWheels() {
@@ -600,6 +640,21 @@ void parsePacket(char* data, int len) {
         } else if (command == 0) {
             stopMovement();
         }
+        else if (command == 3) {
+            // Формат: "3;V;A;W;"
+            char* ptr = buffer + 2;  // пропускаем "3;"
+            
+            float V = strtof(ptr, &ptr);
+            if (*ptr == ';') ptr++;
+            float A = strtof(ptr, &ptr);
+            if (*ptr == ';') ptr++;
+            float W = strtof(ptr, &ptr);
+            
+            setWheelSpeeds(V, A, W);
+            lastCommandTime = millis();
+            isReceivingCommands = true;
+        }
+
         return;
     }
     
@@ -738,6 +793,8 @@ void setup() {
     } else {
         db_exec(db, sqlCreateVectors);
         db_exec(db, sqlCreateLogs);
+        //db_exec(db, sqlDropVectors);
+        //db_exec(db, sqlDropLogs);
         Serial.println("База данных готова к работе");
         Serial.flush();
     }
@@ -790,6 +847,65 @@ void setup() {
   server.on("/logs", handleLogs);
   server.on("/logs/csv", handleLogsCSV);
   server.on("/command", handleCommand);
+  server.on("/trajectories", handleTrajectories);
+  server.on("/select", handleSelectTrajectory);
+  server.on("/joystick", []() {
+      server.send(200, "text/html", WEB_INDEX_HTML);
+  });
+
+  // Для обработчика движения
+  server.on("/motion", []() {
+      if (server.hasArg("x") && server.hasArg("y")) {
+          float x = server.arg("x").toFloat();
+          float y = server.arg("y").toFloat();
+          
+          float speed = sqrt(x * x + y * y);
+          float angle = atan2(y, x);
+          
+          const float MAX_SPEED = 0.5;
+          speed_Move = speed * MAX_SPEED;
+          
+          lastSpeed = speed;
+          lastAngle = angle;
+          
+          float omega = lastOmega;
+          
+         char packet[50];
+          snprintf(packet, sizeof(packet), "command;3;%.3f;%.3f;%.3f;", speed, angle, omega);
+
+          // Правильный способ отправки через WiFiUDP:
+          udpWiFi.beginPacket(groupIP, portUDP);
+          udpFiWi.write((const uint8_t*)packet, strlen(packet));
+          udpWiFi.endPacket();
+          
+          server.send(200, "text/plain", "OK");
+      } else {
+          server.send(400, "text/plain", "Missing parameters");
+      }
+  });
+
+  // Для обработчика поворота
+  server.on("/rotation", []() {
+      if (server.hasArg("rot")) {
+          float rot = server.arg("rot").toFloat();
+          
+          const float MAX_OMEGA = 2.0;
+          float omega = (rot / 100.0) * MAX_OMEGA;
+          lastOmega = omega;
+          
+         char packet[50];
+          snprintf(packet, sizeof(packet), "command;3;%.3f;%.3f;%.3f;", speed, angle, omega);
+
+          // Правильный способ отправки через WiFiUDP:
+          udpWiFi.beginPacket(groupIP, portUDP);
+          udpWiFi.write((const uint8_t*)packet, strlen(packet));
+          udpWiFi.endPacket();
+          
+          server.send(200, "text/plain", "OK");
+      } else {
+          server.send(400, "text/plain", "Missing parameters");
+      }
+  });
   server.begin();
     
   Serial.println("Готов к приему траекторий");
@@ -799,8 +915,8 @@ void setup() {
   RightMotor.setEncoderISR(ISR_RightEncA,ISR_RightEncB);
   //Запуск таймера с периодом 1 мс для регулярного контроля скорости колес 
   timerPID.attach(0.01,timer_ISR);
-  //LeftMotor.setOmega(1); 
-  //RightMotor.setOmega(1);
+  //RightMotor.setOmega(8);
+  //LeftMotor.setOmega(-30); 
 }
 
 void setup1() {
@@ -826,6 +942,13 @@ void loop() {
             lastMovementTime = currentMs;
             processMovement();
         }
+    }
+
+    if (isReceivingCommands && (millis() - lastCommandTime > COMMAND_TIMEOUT_MS)) {
+        // Команды перестали приходить → останавливаемся
+        setWheelSpeeds(0, 0, 0);
+        isReceivingCommands = false;
+        Serial.println("Команды перестали поступать, остановка");
     }
 
     // Слушаем обращения к веб серверу логов
@@ -864,6 +987,8 @@ void handleRoot() {
     html += "th,td{border:1px solid #ddd;padding:8px;text-align:left}";
     html += "tr:nth-child(even){background-color:#f2f2f2}";
     html += ".success{color:green}.error{color:red}";
+    html += "button{padding:10px 15px;margin:5px;cursor:pointer}";
+    html += ".joystick-btn{background:#e94560;color:white}";
     html += "</style>";
     html += "</head><body>";
     
@@ -876,6 +1001,7 @@ void handleRoot() {
     html += "<button onclick='sendCommand(0)'>⏹ STOP</button>";
     html += "<button onclick='location.href=\"/logs\"'>📊 View Logs</button>";
     html += "<button onclick='location.href=\"/logs/csv\"'>📥 Export CSV</button>";
+    html += "<button class='joystick-btn' onclick='location.href=\"/joystick\"'>🎮 Joystick Control</button>";  // ← НОВАЯ КНОПКА
     
     // JavaScript для отправки команд
     html += "<script>";
@@ -887,7 +1013,6 @@ void handleRoot() {
     server.send(200, "text/html", html);
 }
 
-// Страница с логами
 void handleLogs() {
     String html = "<!DOCTYPE html><html><head>";
     html += "<meta charset='UTF-8'>";
@@ -903,12 +1028,12 @@ void handleLogs() {
     
     html += "<table>";
     html += "<thead><tr>";
-    html += "<th>ID</th><th>Vector ID</th><th>Need W</th><th>Fact W</th><th>Wheel Number</th><th>Time</th>";
+    html += "<th>ID</th><th>Simulation ID</th><th>Vector Id</th><th>Need W</th><th>Fact W</th><th>Wheel Number</th>";
     html += "</tr></thead><tbody>";
     
     char sql[200];
     snprintf(sql, sizeof(sql), 
-             "SELECT Id, Vector_id, Need_w, Fact_w, Wheel_number, Created_at FROM Logs WHERE Simulation_id = %ld ORDER BY Id DESC LIMIT 500;",
+             "SELECT Id, Simulation_id, Vector_id, Need_w, Fact_w, Wheel_number FROM Logs WHERE Simulation_id = %ld ORDER BY Id DESC LIMIT 500;",
              simulationId);
     
     rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
@@ -917,10 +1042,10 @@ void handleLogs() {
             html += "<tr>";
             html += "<td>" + String(sqlite3_column_int(res, 0)) + "</td>";
             html += "<td>" + String(sqlite3_column_int(res, 1)) + "</td>";
-            html += "<td>" + String(sqlite3_column_double(res, 2)) + "</td>";
+            html += "<td>" + String(sqlite3_column_int(res, 2)) + "</td>";
             html += "<td>" + String(sqlite3_column_double(res, 3)) + "</td>";
-            html += "<td>" + String(sqlite3_column_int(res, 4)) + "</td>";  // Wheel number
-            html += "<td>" + String((const char*)sqlite3_column_text(res, 5)) + "</td>";
+            html += "<td>" + String(sqlite3_column_double(res, 4)) + "</td>";
+            html += "<td>" + String(sqlite3_column_int(res, 5)) + "</td>";
             html += "</tr>";
         }
         sqlite3_finalize(res);
@@ -932,28 +1057,116 @@ void handleLogs() {
 
 // Экспорт в CSV
 void handleLogsCSV() {
-    // Заголовок CSV с WheelNumber
-    String csv = "Id,VectorId,NeedW,FactW,WheelNumber,Time\n";
+    // Заголовок CSV
+    String csv = "Id,SimulationId,VectorId,NeedW,FactW,WheelNumber\n";
     
     char sql[200];
     snprintf(sql, sizeof(sql), 
-             "SELECT Id, Vector_id, Need_w, Fact_w, Wheel_number, Created_at FROM Logs WHERE Simulation_id = %ld ORDER BY Id;",
+             "SELECT Id, Simulation_id, Vector_id, Need_w, Fact_w, Wheel_number FROM Logs WHERE Simulation_id = %ld ORDER BY Id;",
              simulationId);
     
     rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
     if (rc == SQLITE_OK) {
         while (sqlite3_step(res) == SQLITE_ROW) {
             csv += String(sqlite3_column_int(res, 0)) + ",";   // Id
-            csv += String(sqlite3_column_int(res, 1)) + ",";   // Vector_id
-            csv += String(sqlite3_column_double(res, 2)) + ","; // Need_w
-            csv += String(sqlite3_column_double(res, 3)) + ","; // Fact_w
-            csv += String(sqlite3_column_int(res, 4)) + ",";    // Wheel_number
-            csv += String((const char*)sqlite3_column_text(res, 5)) + "\n"; // Created_at
+            csv += String(sqlite3_column_int(res, 1)) + ",";   // Simulation id
+            csv += String(sqlite3_column_int(res, 2)) + ",";   // Vector id
+            csv += String(sqlite3_column_double(res, 3)) + ","; // Need w
+            csv += String(sqlite3_column_double(res, 4)) + ","; // Fact w
+            csv += String(sqlite3_column_int(res, 5)) + "\n";   // Wheel number
         }
         sqlite3_finalize(res);
     }
     
     server.send(200, "text/csv", csv);
+}
+
+// Получение списка всех траекторий
+String getTrajectoriesList() {
+    String html = "<!DOCTYPE html><html><head>";
+    html += "<meta charset='UTF-8'>";
+    html += "<title>Select Trajectory</title>";
+    html += "<style>";
+    html += "body{font-family:Arial;margin:20px}";
+    html += "table{border-collapse:collapse;width:100%}";
+    html += "th,td{border:1px solid #ddd;padding:8px;text-align:left}";
+    html += "tr:nth-child(even){background-color:#f2f2f2}";
+    html += "button{padding:5px 10px;cursor:pointer}";
+    html += ".selected{background-color:#4CAF50;color:white}";
+    html += "</style>";
+    html += "<script>";
+    html += "function selectTrajectory(id){";
+    html += "fetch('/select?id='+id).then(r=>r.text()).then(data=>{";
+    html += "alert(data);";
+    html += "window.location.href='/';";
+    html += "});";
+    html += "}";
+    html += "</script>";
+    html += "</head><body>";
+    
+    html += "<h1>Выбор траектории</h1>";
+    html += "<a href='/'>← На главную</a><br><br>";
+    
+    char sql[200];
+    snprintf(sql, sizeof(sql), 
+             "SELECT DISTINCT Simulation_id, COUNT(*) as VectorsCount FROM Vectors GROUP BY Simulation_id ORDER BY Simulation_id DESC;");
+    
+    rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
+    if (rc == SQLITE_OK) {
+        html += "<table>";
+        html += "<thead><tr><th>Simulation ID</th><th>Количество векторов</th><th>Действие</th></tr></thead><tbody>";
+        
+        while (sqlite3_step(res) == SQLITE_ROW) {
+            int simId = sqlite3_column_int(res, 0);
+            int vectorsCount = sqlite3_column_int(res, 1);
+            
+            html += "<tr>";
+            html += "<td>" + String(simId) + "</td>";
+            html += "<td>" + String(vectorsCount) + "</td>";
+            html += "<td><button onclick='selectTrajectory(" + String(simId) + ")'>Выбрать</button></td>";
+            html += "</tr>";
+        }
+        sqlite3_finalize(res);
+    } else {
+        html += "<tr><td colspan='3'>Нет сохранённых траекторий</td></tr>";
+    }
+    
+    html += "</tbody></table></body></html>";
+    return html;
+}
+
+// Обработчик выбора траектории
+void handleSelectTrajectory() {
+    if (server.hasArg("id")) {
+        long newSimId = server.arg("id").toInt();
+        
+        // Проверяем, есть ли вектора для этой симуляции
+        char sql[100];
+        snprintf(sql, sizeof(sql), "SELECT COUNT(*) FROM Vectors WHERE Simulation_id = %ld;", newSimId);
+        
+        rc = sqlite3_prepare_v2(db, sql, -1, &res, NULL);
+        if (rc == SQLITE_OK && sqlite3_step(res) == SQLITE_ROW) {
+            int count = sqlite3_column_int(res, 0);
+            sqlite3_finalize(res);
+            
+            if (count > 0) {
+                simulationId = newSimId;
+                server.send(200, "text/plain", "OK: Траектория " + String(newSimId) + " выбрана (" + String(count) + " векторов)");
+            } else {
+                server.send(404, "text/plain", "ERROR: Нет векторов для симуляции " + String(newSimId));
+            }
+        } else {
+            sqlite3_finalize(res);
+            server.send(500, "text/plain", "ERROR: Ошибка базы данных");
+        }
+    } else {
+        server.send(400, "text/plain", "ERROR: Missing id parameter");
+    }
+}
+
+// Обработчик страницы выбора траектории
+void handleTrajectories() {
+    server.send(200, "text/html", getTrajectoriesList());
 }
 
 // API для команд
@@ -973,3 +1186,4 @@ void handleCommand() {
         server.send(400, "text/plain", "Missing cmd parameter");
     }
 }
+
