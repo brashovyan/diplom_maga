@@ -11,7 +11,7 @@
 #include <queue>
 #include <cstring>
 
-#define CONTROLLER_ID 1  // Обозначение номера контроллера
+#define CONTROLLER_ID 7  // Обозначение номера контроллера
 
 #include <WebServer.h>
 #include <ESPmDNS.h>
@@ -160,11 +160,11 @@ Motor::Motor(uint8_t pin_Forward, uint8_t pin_Reverse, uint8_t pin_EncA, uint8_t
   dt=0x7fffffff;            //Временной интервал между прерываниями энкодера: инициализация максимально возможным значением
   timeA=timeB=micros();     //Время крайнего прерывания на каналах (А и В) энкодера
   countTickEnc=0;           //Количество шагов (stepAngle) в повороте колеса
-  stepAngle=PI/550;        //Шаг угла поворота колеса между прерываниями на одном канале квадратурного энкодера
-  Kp_omega=2.5;             //Коэффициент пропорционального регулятора угловой скорости
-  Ki_omega=0.3;            //Коэффициент интегрального регулятора угловой скорости
-  Kp_angle=60;            //Коэффициент пропорционального регулятора угла
-  Kd_angle=20;             //Коэффициент дифференциального регулятора угла
+  stepAngle=PI/1850;        //Шаг угла поворота колеса между прерываниями на одном канале квадратурного энкодера
+  Kp_omega=1000;              //Коэффициент пропорционального регулятора угловой скорости
+  Ki_omega=1000;             //Коэффициент интегрального регулятора угловой скорости
+  Kp_angle=4000;            //Коэффициент пропорционального регулятора угла
+  Kd_angle=1e5;              //Коэффициент дифференциального регулятора угла
   desiredOmega=0;           //Желаемое значение угловой скорости колеса в радианах
   t0=timeA;                 //Время в момент изменения желаемой скорости
   angle0=prevAngle=0;       //Угол поворота оси в момент измененияя желаемой скорости                 
@@ -296,16 +296,83 @@ void timer_ISR(){
 
 // Функции управления колесами (заглушки - реализовать позже)
 void setWheelSpeeds(float V, float A, float W) {
-    // Колеса 1 и 2
-    double A2 = 0;
+    // // Колеса 1 и 2
+    // double A2 = 0;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (1)
+    // //lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    // lastNeedWR = (-Vx2-Vy2-W);
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (2)
+    // //lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
+    // lastNeedWL = (-Vx2+Vy2-W);
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 3 и 4
+    // double A2 = 0;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (1)
+    // //lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // lastNeedWR = (-Vx2-Vy2+W);
+    // RightMotor.setOmega(-lastNeedWR);
+    // // Левое колесо (2)
+    // //lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // lastNeedWL = (-Vx2+Vy2+W);
+    // LeftMotor.setOmega(-lastNeedWL);
+
+    // // Колеса 5 и 6
+    // double A2 = 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (5)
+    // //lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    // lastNeedWR = (-Vx2-Vy2-W);
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (6)
+    // //lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
+    // lastNeedWL = (-Vx2+Vy2-W);
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 7 и 8
+    double A2 = 3.14159265 / 3;
     double Vx2 = V * cos(A-A2);
     double Vy2 = V * sin(A-A2);
-    // Право колесо (1)
-    lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
-    RightMotor.setOmega(lastNeedWR);
-    // Левое колесо (2)
-    lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
-    LeftMotor.setOmega(lastNeedWL);
+    // Право колесо (7)
+    //lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    lastNeedWR = (-Vx2-Vy2+W);
+    RightMotor.setOmega(-lastNeedWR);
+    // Левое колесо (8)
+    //lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    lastNeedWL = (-Vx2+Vy2+W);
+    LeftMotor.setOmega(-lastNeedWL);
+
+    // // Колеса 9 и 10
+    // double A2 = 2 * 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (9)
+    // //lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    // lastNeedWR = (-Vx2-Vy2-W);
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (10)
+    // //lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
+    // lastNeedWL = (-Vx2+Vy2-W);
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 11 и 12
+    // double A2 = 2 * 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (11)
+    // //lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // lastNeedWR = (-Vx2-Vy2+W);
+    // RightMotor.setOmega(-lastNeedWR);
+    // // Левое колесо (12)
+    // //lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // lastNeedWL = (-Vx2+Vy2+W);
+    // LeftMotor.setOmega(-lastNeedWL);
 
     // // Колеса 3 и 4
     // double A2 = 0;
@@ -912,7 +979,7 @@ void setup() {
   //Назначение энкодеру заднего правого колеса глобальных callback-функций
   RightMotor.setEncoderISR(ISR_RightEncA,ISR_RightEncB);
   //Запуск таймера с периодом 1 мс для регулярного контроля скорости колес 
-  timerPID.attach(0.01,timer_ISR);
+  timerPID.attach(0.0025,timer_ISR);
   //RightMotor.setOmega(8);
   //LeftMotor.setOmega(-30); 
 }
@@ -952,7 +1019,7 @@ void loop() {
     // Слушаем обращения к веб серверу логов
     server.handleClient();
     
-    delay(0.01);  // Отдаём процессорное время
+    //delay(0.01);  // Отдаём процессорное время
 }
 
 void loop1() {
@@ -999,7 +1066,8 @@ void handleRoot() {
     html += "<button onclick='sendCommand(0)'>⏹ STOP</button>";
     html += "<button onclick='location.href=\"/logs\"'>📊 View Logs</button>";
     html += "<button onclick='location.href=\"/logs/csv\"'>📥 Export CSV</button>";
-    html += "<button class='joystick-btn' onclick='location.href=\"/joystick\"'>🎮 Joystick Control</button>";  // ← НОВАЯ КНОПКА
+    html += "<button class='joystick-btn' onclick='location.href=\"/joystick\"'>🎮 Joystick Control</button>";
+    html += "<button onclick='location.href=\"/trajectories\"'>🛣️ Trajectories</button>";
     
     // JavaScript для отправки команд
     html += "<script>";
