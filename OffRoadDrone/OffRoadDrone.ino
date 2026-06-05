@@ -34,10 +34,6 @@ WebServer server(80);
 
 Ticker timerPID;              //Таймер ПИД-регулятора
 
-double r = 0.045;        //Радиус Mecanum-колеса,
-double lx = 0.055;      //Расстояние от продольной оси шасси до продольной линии опоры колес, м
-double ly = 0.1;
-
 // Структура для хранения UDP-пакета
 struct QueuedPacket {
     char data[600];  // Буфер приема пакетов UDP
@@ -47,7 +43,7 @@ struct QueuedPacket {
 std::queue<QueuedPacket> packetQueue;
 
 //Параметры коммуникационного процессора=============================================================
-char ssid[] = "KeyTim";          //Идентификатор WiFi-сети робота (в режиме: "точка доступа" - AP)
+char ssid[] = "KeyTim";          //Идентификатор WiFi-сети робота (в режиме: "точка доступа")
 char pass[] = "18273645";         //Пароль доступа к WiFi-сети
 IPAddress localIP;                // Локальный IP-адрес
 AsyncUDP udp;                     //UDP-сервер
@@ -60,7 +56,7 @@ sqlite3_stmt *res;    //Указатель на объект с параметр
 int rc;               //Переменная с кодом результата текущей операции с БД
 char *zErrMsg = 0;    //Переменная для получения информации об ошибке SQLite
 
-// Глобальные SQL-запросы (хранятся во flash, не в ОЗУ)
+// Глобальные SQL-запросы
 const char sqlCreateVectors[] = \
 "CREATE TABLE IF NOT EXISTS Vectors (Id INTEGER PRIMARY KEY AUTOINCREMENT, Simulation_id INTEGER NOT NULL, V REAL NOT NULL, \
 A REAL NOT NULL, W REAL NOT NULL, T REAL NOT NULL);";
@@ -76,7 +72,7 @@ const char sqlDropLogs[] = "DROP TABLE IF EXISTS Logs";
 struct vector_t {
   uint32_t Id; // Айди вектора
   uint32_t  Simulation_id; // Айди симуляции
-  float V; // Скорость (м/с)
+  float V; // Скорость (рад/с)
   float A; // Угол (рад)
   float W; // Угловая скорость (рад/с) 
   float T; // Время (с)
@@ -86,10 +82,10 @@ vector_t actualVector;
 volatile bool inMovement = false;      // Флаг движения
 uint32_t currentVectorId = 0;          // ID текущего вектора
 uint32_t previousVectorId = 0;         // ID предыдущего вектора (для логов)
-float lastNeedWL = 0;                   // Последняя заданная мощность левого двигателя (или скорость)
-float lastFactWL = 0;                   // Последняя фактическая мощность левого двигателя (или скорость)
-float lastNeedWR = 0;                   // Последняя заданная мощность правого двигателя (или скорость)
-float lastFactWR = 0;                   // Последняя фактическая мощность правого двигателя (или скорость)
+float lastNeedWL = 0;                   // Последняя заданная скорость левого двигателя
+float lastFactWL = 0;                   // Последняя фактическая скорость левого двигателя
+float lastNeedWR = 0;                   // Последняя заданная скорость правого двигателя
+float lastFactWR = 0;                   // Последняя фактическая скорость правого двигателя
 
 // Параметры вектора для воспроизведения
 float currentV, currentA, currentW, currentT;
@@ -172,7 +168,6 @@ void Motor::ISR_EncA(){
     countTickEnc++;
   else
     countTickEnc--;
-  //Serial.println(countTickEnc);
 }
 
 void Motor::ISR_EncB(){
@@ -281,18 +276,16 @@ void timer_ISR(){
 }
 //===================================================================================================================
 
-// Функции управления колесами (заглушки - реализовать позже)
+// Функции управления колесами
 void setWheelSpeeds(float V, float A, float W) {
     // // Колеса 1 и 2
     // double A2 = 0;
     // double Vx2 = V * cos(A-A2);
     // double Vy2 = V * sin(A-A2);
     // // Право колесо (1)
-    // //lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
     // lastNeedWR = (-Vx2-Vy2-W);
     // RightMotor.setOmega(lastNeedWR);
     // // Левое колесо (2)
-    // //lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
     // lastNeedWL = (-Vx2+Vy2-W);
     // LeftMotor.setOmega(lastNeedWL);
 
@@ -301,11 +294,9 @@ void setWheelSpeeds(float V, float A, float W) {
     // double Vx2 = V * cos(A-A2);
     // double Vy2 = V * sin(A-A2);
     // // Право колесо (1)
-    // //lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
     // lastNeedWR = (-Vx2-Vy2+W);
     // RightMotor.setOmega(-lastNeedWR);
     // // Левое колесо (2)
-    // //lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
     // lastNeedWL = (-Vx2+Vy2+W);
     // LeftMotor.setOmega(-lastNeedWL);
 
@@ -314,11 +305,9 @@ void setWheelSpeeds(float V, float A, float W) {
     double Vx2 = V * cos(A-A2);
     double Vy2 = V * sin(A-A2);
     // Право колесо (5)
-    //lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
     lastNeedWR = (-Vx2-Vy2-W);
     RightMotor.setOmega(lastNeedWR);
     // Левое колесо (6)
-    //lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
     lastNeedWL = (-Vx2+Vy2-W);
     LeftMotor.setOmega(lastNeedWL);
 
@@ -327,11 +316,9 @@ void setWheelSpeeds(float V, float A, float W) {
     // double Vx2 = V * cos(A-A2);
     // double Vy2 = V * sin(A-A2);
     // // Право колесо (7)
-    // //lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
     // lastNeedWR = (-Vx2-Vy2+W);
     // RightMotor.setOmega(-lastNeedWR);
     // // Левое колесо (8)
-    // //lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
     // lastNeedWL = (-Vx2+Vy2+W);
     // LeftMotor.setOmega(-lastNeedWL);
 
@@ -340,11 +327,9 @@ void setWheelSpeeds(float V, float A, float W) {
     // double Vx2 = V * cos(A-A2);
     // double Vy2 = V * sin(A-A2);
     // // Право колесо (9)
-    // //lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
     // lastNeedWR = (-Vx2-Vy2-W);
     // RightMotor.setOmega(lastNeedWR);
     // // Левое колесо (10)
-    // //lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
     // lastNeedWL = (-Vx2+Vy2-W);
     // LeftMotor.setOmega(lastNeedWL);
 
@@ -353,22 +338,16 @@ void setWheelSpeeds(float V, float A, float W) {
     // double Vx2 = V * cos(A-A2);
     // double Vy2 = V * sin(A-A2);
     // // Право колесо (11)
-    // //lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
     // lastNeedWR = (-Vx2-Vy2+W);
     // RightMotor.setOmega(-lastNeedWR);
     // // Левое колесо (12)
-    // //lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
     // lastNeedWL = (-Vx2+Vy2+W);
     // LeftMotor.setOmega(-lastNeedWL);
-
-    //Serial.printf("setWheelSpeeds: V=%.3f, A=%.3f, W=%.3f\n", V, A, W);
 }
 
 void stopAllWheels() {
-    // TODO: остановить все моторы
     LeftMotor.setOmega(0);
     RightMotor.setOmega(0);
-    Serial.println("stopAllWheels: Моторы остановлены");
 }
 
 //Процедура инициализации программно-аппаратных средств управления модулем (внешним) памяти стенда
@@ -428,9 +407,6 @@ bool loadFirstVector() {
         
         vectorStartTime = millis() / 1000.0;  // текущее время в секундах
         vectorElapsedTime = 0;
-        
-        Serial.printf("Загружен вектор %d: V=%.3f, A=%.3f, W=%.3f, T=%.3f\n", 
-                      currentVectorId, currentV, currentA, currentW, currentT);
         
         sqlite3_finalize(res);
         return true;
@@ -696,19 +672,15 @@ void parsePacket(char* data, int len) {
         }
         vectorsCount++;
     }
-    
-    Serial.printf("Сохранено %d векторов для симуляции %ld\n", vectorsCount, simulationId);
 }
 
-// Начать движение по команде из CoppeliaSim
+// Начать движение
 void startMovement() {
     if (inMovement) {
-        Serial.println("Движение уже выполняется");
         return;
     }
     
     if (simulationId == 0) {
-        Serial.println("Ошибка: нет сохранённой траектории (simulationId=0)");
         return;
     }
     
@@ -720,13 +692,10 @@ void startMovement() {
     lastFactWR = 0;
     
     if (!loadFirstVector()) {
-        Serial.println("Ошибка: не найдены вектора для симуляции");
         return;
     }
     
     setWheelSpeeds(currentV, currentA, currentW);
-    Serial.printf("Старт: V=%.3f, A=%.3f, W=%.3f, T=%.3f\n", 
-                  currentV, currentA, currentW, currentT);
     
     inMovement = true;
     lastMovementTime = millis();
@@ -734,7 +703,7 @@ void startMovement() {
     vectorElapsedTime = 0;
 }
 
-// Закончить движение по команде из CoppeliaSim
+// Закончить движение
 void stopMovement() {
     if (!inMovement) return;
     
@@ -758,8 +727,6 @@ void stopMovement() {
     lastFactWL = 0;
     lastNeedWR = 0;
     lastFactWR = 0;
-    
-    Serial.println("Движение остановлено");
 }
 
 void setup() {
@@ -841,9 +808,7 @@ void setup() {
   //Назначение энкодеру заднего правого колеса глобальных callback-функций
   RightMotor.setEncoderISR(ISR_RightEncA,ISR_RightEncB);
   //Запуск таймера с периодом 1 мс для регулярного контроля скорости колес 
-  timerPID.attach(0.0025,timer_ISR);
-  //RightMotor.setOmega(8);
-  //LeftMotor.setOmega(-30); 
+  timerPID.attach(0.0025,timer_ISR); 
 }
 
 void setup1() {
@@ -873,8 +838,6 @@ void loop() {
 
     // Слушаем обращения к веб серверу логов
     server.handleClient();
-    
-    //delay(0.01);  // Отдаём процессорное время
 }
 
 void loop1() {

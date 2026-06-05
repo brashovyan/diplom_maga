@@ -35,7 +35,6 @@ def send_trajectory(trajectory_id, vectors):
     print(f"Разбита на {len(parts)} частей")
     
     for i, part in enumerate(parts, 1):
-        print(part)
         sock.sendto(part.encode(), (UDP_IP, UDP_PORT))
         print(f"  Часть {i}/{len(parts)}: {len(part)} байт")
         time.sleep(1.5)
@@ -48,10 +47,7 @@ def send_command(command):
     sock.sendto(packet.encode(), (UDP_IP, UDP_PORT))
     print(f"Команда {'СТАРТ' if command == 1 else 'СТОП'} отправлена")
 
-# ============================================================
 # Простые траектории (каждая из одного вектора)
-# ============================================================
-
 def trajectory_forward(duration=2.0):
     """Вперёд: скорость 0.5 м/с, угол 0°, длительность duration"""
     return [{"V": 0.5, "A": 0, "W": 0, "T": duration}]
@@ -60,12 +56,12 @@ def trajectory_backward(duration=2.0):
     """Назад: скорость 0.5 м/с, угол 180°"""
     return [{"V": 0.5, "A": math.pi, "W": 0, "T": duration}]
 
-def trajectory_left(duration=2.0):
-    """Влево (крабом): скорость 0.5 м/с, угол 90°"""
+def trajectory_right(duration=2.0):
+    """Вправо (крабом): скорость 0.5 м/с, угол 90°"""
     return [{"V": 0.5, "A": math.pi/2, "W": 0, "T": duration}]
 
-def trajectory_right(duration=2.0):
-    """Вправо (крабом): скорость 0.5 м/с, угол -90°"""
+def trajectory_left(duration=2.0):
+    """Влево (крабом): скорость 0.5 м/с, угол -90°"""
     return [{"V": 0.5, "A": -math.pi/2, "W": 0, "T": duration}]
 
 def trajectory_rotate_left(angle_deg=90):
@@ -80,15 +76,8 @@ def trajectory_rotate_right(angle_deg=90):
     duration = (angle_deg * math.pi / 180) / abs(omega)
     return [{"V": 0, "A": 0, "W": omega, "T": duration}]
 
-# ============================================================
-# Основная программа
-# ============================================================
-if __name__ == "__main__":
-    print("=" * 50)
-    print("Управление роботом через UDP мультикаст")
-    print("=" * 50)
-    
-    # Фиксированный ID для простых команд (или генерируем случайный)
+if __name__ == "__main__":    
+    # Генерируем Simulation Id
     import random
     last_id = random.randint(100000000, 900000000)
     
@@ -118,12 +107,12 @@ if __name__ == "__main__":
         
         elif choice == "3":
             last_id += 1
-            send_trajectory(last_id, trajectory_left(2.0))
+            send_trajectory(last_id, trajectory_right(2.0))
             print("Траектория отправлена. Используйте 'Старт' для начала движения")
         
         elif choice == "4":
             last_id += 1
-            send_trajectory(last_id, trajectory_right(2.0))
+            send_trajectory(last_id, trajectory_left(2.0))
             print("Траектория отправлена. Используйте 'Старт' для начала движения")
         
         elif choice == "5":
