@@ -6,7 +6,7 @@ import math
 UDP_IP = "239.1.1.1"
 UDP_PORT = 7856
 MULTICAST_TTL = 2
-MAX_PACKET_SIZE = 400
+MAX_PACKET_SIZE = 300
 
 # Создаем UDP сокет для мультикаст рассылки
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)

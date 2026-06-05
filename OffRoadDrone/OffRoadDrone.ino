@@ -10,7 +10,7 @@
 #include <queue>
 #include <cstring>
 
-#define CONTROLLER_ID 7  // Обозначение номера контроллера
+#define CONTROLLER_ID 5  // Обозначение номера контроллера
 
 #include <WebServer.h>
 #include <ESPmDNS.h>
@@ -310,30 +310,30 @@ void setWheelSpeeds(float V, float A, float W) {
     // LeftMotor.setOmega(-lastNeedWL);
 
     // // Колеса 5 и 6
-    // double A2 = 3.14159265 / 3;
-    // double Vx2 = V * cos(A-A2);
-    // double Vy2 = V * sin(A-A2);
-    // // Право колесо (5)
-    // //lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
-    // lastNeedWR = (-Vx2-Vy2-W);
-    // RightMotor.setOmega(lastNeedWR);
-    // // Левое колесо (6)
-    // //lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
-    // lastNeedWL = (-Vx2+Vy2-W);
-    // LeftMotor.setOmega(lastNeedWL);
-
-    // // Колеса 7 и 8
     double A2 = 3.14159265 / 3;
     double Vx2 = V * cos(A-A2);
     double Vy2 = V * sin(A-A2);
-    // Право колесо (7)
-    //lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
-    lastNeedWR = (-Vx2-Vy2+W);
-    RightMotor.setOmega(-lastNeedWR);
-    // Левое колесо (8)
-    //lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
-    lastNeedWL = (-Vx2+Vy2+W);
-    LeftMotor.setOmega(-lastNeedWL);
+    // Право колесо (5)
+    //lastNeedWR = (-Vx2-Vy2-(lx+ly)*W) / r;
+    lastNeedWR = (-Vx2-Vy2-W);
+    RightMotor.setOmega(lastNeedWR);
+    // Левое колесо (6)
+    //lastNeedWL = (-Vx2+Vy2-(lx+ly)*W) / r;
+    lastNeedWL = (-Vx2+Vy2-W);
+    LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 7 и 8
+    // double A2 = 3.14159265 / 3;
+    // double Vx2 = V * cos(A-A2);
+    // double Vy2 = V * sin(A-A2);
+    // // Право колесо (7)
+    // //lastNeedWR = (-Vx2-Vy2+(lx+ly)*W) / r;
+    // lastNeedWR = (-Vx2-Vy2+W);
+    // RightMotor.setOmega(-lastNeedWR);
+    // // Левое колесо (8)
+    // //lastNeedWL = (-Vx2+Vy2+(lx+ly)*W) / r;
+    // lastNeedWL = (-Vx2+Vy2+W);
+    // LeftMotor.setOmega(-lastNeedWL);
 
     // // Колеса 9 и 10
     // double A2 = 2 * 3.14159265 / 3;
