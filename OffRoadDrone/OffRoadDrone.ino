@@ -615,7 +615,6 @@ void parsePacket(char* data, int len) {
         } else if (command == 0) {
             stopMovement();
         }
-
         else if (command == 3 && inMovement == false) {
             // Ищем вторую точку с запятой (после "command;3;")
             char* ptr = strchr(buffer, ';');  // первая ';' после "command"
@@ -634,7 +633,6 @@ void parsePacket(char* data, int len) {
                 }
             }
         }
-
         return;
     }
     
