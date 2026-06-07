@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>🤖 Omnibot Remote Control</title>
+  <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --base-size: clamp(10px, 2vmin, 50px);
+    --joystick-size: clamp(100px, 35vmin, 300px);
+    --joystick-knob-size: clamp(35px, 12vmin, 110px);
+    --header-size: clamp(14px, 2vw, 24px);
+    --text-size: clamp(12px, 1.8vw, 20px);
+    --small-text: clamp(10px, 1.5vw, 16px);
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    font-family: 'Courier New', Courier, monospace;
+    background-color: rgb(27, 27, 27);
+    color: rgb(222, 222, 222);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    gap: var(--base-size);
+    padding: calc(var(--base-size) * 0.5);
+}
+
+h1 {
+    color: white;
+    text-align: center;
+    font-size: clamp(1em, 4vw, 2.5em);
+    margin: 0;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+header {
+    display: flex;
+    text-align: left;
+    flex-wrap: wrap;
+    gap: calc(var(--base-size) * 0.5);
+    margin: 0;
+    padding: calc(var(--base-size) * 0.5);
+    width: 100%;
+    color: rgb(222, 222, 222);
+    background-color: rgba(0, 0, 0, 0.558);
+    border: 2px solid rgba(0, 0, 0, 0.3);
+    border-radius: clamp(15px, 3vmin, 25px);
+    text-shadow: 2px 2px 5px rgba(255, 255, 255, 0.4);
+    box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+header details {
+    flex: 1;
+    min-width: 200px;
+}
+
+summary {
+    cursor: pointer;
+    font-size: var(--text-size);
+    font-weight: bold;
+    color: rgb(200, 200, 200);
+    padding: calc(var(--base-size) * 0.3);
+}
+
+summary:hover {
+    color: rgb(255, 255, 255);
+}
+
+#info-box {
+    font-size: var(--small-text);
+    color: rgb(166, 166, 166);
+    margin-top: calc(var(--base-size) * 0.5);
+    padding: calc(var(--base-size) * 0.3);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: calc(var(--base-size) * 0.5);
+}
+
+span {
+    color: #FFD700;
+    font-weight: bold;
+}
+
+.main-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: calc(var(--base-size) * 1.5);
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    align-items: center;
+    justify-items: center;
+}
+
+.workspace {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--base-size) * 0.5);
+    padding: calc(var(--base-size) * 0.5);
+    background: linear-gradient(-45deg, rgba(238, 119, 82, 0.1), rgba(231, 60, 126, 0.1), rgba(35, 166, 213, 0.1), rgba(35, 213, 171, 0.1));
+    border: 2px solid rgba(100, 100, 100, 0.3);
+    border-radius: clamp(15px, 3vmin, 25px);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.workspace-label {
+    font-size: var(--text-size);
+    font-weight: bold;
+    color: rgba(255, 200, 100, 0.8);
+    text-align: center;
+}
+
+.joystick-base {
+    position: relative;
+    width: var(--joystick-size);
+    height: var(--joystick-size);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(37, 37, 37, 0.811);
+    border: 3px solid rgba(21, 21, 21, 0.6);
+    border-radius: 50%;
+    box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.5);
+    touch-action: none;
+}
+
+.joystick-knob {
+    position: absolute;
+    width: var(--joystick-knob-size);
+    height: var(--joystick-knob-size);
+    background: linear-gradient(135deg, rgba(226, 255, 37, 0.8) 0%, rgb(60, 255, 112) 100%);
+    border-radius: 50%;
+    cursor: grab;
+    touch-action: none;
+    box-shadow: 0 0 15px rgba(60, 255, 112, 0.6), inset -2px -2px 5px rgba(0, 0, 0, 0.3);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.joystick-knob.active {
+    cursor: grabbing;
+    box-shadow: 0 0 25px rgba(60, 255, 112, 1), inset -2px -2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.stop-button {
+    margin-top: calc(var(--base-size) * 0.5);
+    padding: calc(var(--base-size) * 0.3) calc(var(--base-size) * 0.6);
+    background: linear-gradient(135deg, rgba(255, 100, 100, 0.8) 0%, rgb(255, 50, 50) 100%);
+    border: 2px solid rgba(200, 50, 50, 0.6);
+    border-radius: calc(var(--base-size) * 0.5);
+    color: white;
+    font-size: var(--text-size);
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.stop-button:hover {
+    background: linear-gradient(135deg, rgba(255, 150, 150, 0.9) 0%, rgb(255, 100, 100) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.stop-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Rectangular Tumbler Styles (Horizontal) */
+#joystick-right-base {
+    border-radius: 15px;
+    width: clamp(150px, 45vmin, 320px) !important;
+    height: clamp(80px, 20vmin, 120px) !important;
+}
+
+#joystick-right-knob {
+    border-radius: 12px;
+    width: clamp(50px, 15vmin, 90px) !important;
+    height: clamp(70px, 18vmin, 110px) !important;
+    background: linear-gradient(90deg, rgba(100, 200, 255, 0.9) 0%, rgba(60, 150, 255, 0.8) 100%);
+    box-shadow: 0 0 15px rgba(60, 150, 255, 0.8), inset -2px -2px 5px rgba(0, 0, 0, 0.3) !important;
+}
+
+#joystick-right-knob.active {
+    box-shadow: 0 0 25px rgba(60, 150, 255, 1), inset -2px -2px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+.stats-panel {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--base-size) * 0.3);
+    padding: calc(var(--base-size) * 0.5);
+    background-color: rgba(0, 0, 0, 0.558);
+    border: 2px solid rgb(0, 0, 0, 0.3);
+    border-radius: clamp(10px, 2vmin, 20px);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+    width: 100%;
+    max-width: 400px;
+}
+
+.stats-title {
+    font-size: var(--text-size);
+    font-weight: bold;
+    color: rgb(222, 222, 222);
+    border-bottom: 2px solid rgba(100, 100, 100, 0.5);
+    padding-bottom: calc(var(--base-size) * 0.3);
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--small-text);
+    color: rgb(166, 166, 166);
+    padding: calc(var(--base-size) * 0.2);
+}
+
+.stat-label {
+    flex: 1;
+}
+
+.stat-value {
+    color: #FFD700;
+    font-weight: bold;
+    min-width: 60px;
+    text-align: right;
+}
+
+@media (max-width: 768px) {
+    .main-container {
+        grid-template-columns: 1fr;
+        gap: var(--base-size);
+    }
+
+    .workspace {
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: calc(var(--base-size) * 0.3);
+        gap: calc(var(--base-size) * 0.3);
+    }
+
+    h1 {
+        font-size: clamp(1em, 3.5vw, 1.8em);
+    }
+
+    .main-container {
+        gap: calc(var(--base-size) * 0.8);
+    }
+
+    .stats-panel {
+        max-width: 100%;
+        padding: calc(var(--base-size) * 0.3);
+    }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+    :root {
+        --joystick-size: clamp(80px, 30vmin, 200px);
+        --joystick-knob-size: clamp(28px, 10vmin, 80px);
+    }
+
+    body {
+        gap: calc(var(--base-size) * 0.3);
+        padding: calc(var(--base-size) * 0.25);
+    }
+
+    h1 {
+        font-size: clamp(0.9em, 3vw, 1.5em);
+    }
+
+    .main-container {
+        gap: calc(var(--base-size) * 0.8);
+    }
+}
+  </style>
+</head>
+
+<body>
+  <h1>🚗 OMNIBOT REMOTE CONTROL 🤖</h1>
+  
+  <header>
+  </header>
+
+  <div class="main-container">
+    <!-- LEFT WORKSPACE: Linear Motion Joystick -->
+    <div class="workspace">
+      <div class="workspace-label">👆 Linear Motion (Left Finger)</div>
+      <div class="joystick-base" id="joystick-left-base">
+        <div class="joystick-knob" id="joystick-left-knob"></div>
+      </div>
+      <button class="stop-button" id="stop-left" onclick="stopJoystick('left')">⏹️ STOP</button>
+      <div class="stats-panel">
+        <div class="stats-title">Motion Stats</div>
+        <div class="stat-item">
+          <span class="stat-label">X Axis:</span>
+          <span class="stat-value" id="stat-x">0.000</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Y Axis:</span>
+          <span class="stat-value" id="stat-y">0.000</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Speed:</span>
+          <span class="stat-value" id="stat-speed">0%</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Angle:</span>
+          <span class="stat-value" id="stat-angle">0°</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT WORKSPACE: Rotation Joystick -->
+    <div class="workspace">
+      <div class="workspace-label">👆 Rotation Control (Right Finger)</div>
+      <div class="joystick-base" id="joystick-right-base">
+        <div class="joystick-knob" id="joystick-right-knob"></div>
+      </div>
+      <button class="stop-button" id="stop-right" onclick="stopJoystick('right')">⏹️ STOP</button>
+      <div class="stats-panel">
+        <div class="stats-title">Rotation Stats</div>
+        <div class="stat-item">
+          <span class="stat-label">Rot X:</span>
+          <span class="stat-value" id="stat-rot-x">0.000</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Rot Y:</span>
+          <span class="stat-value" id="stat-rot-y">0.000</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Rotation:</span>
+          <span class="stat-value" id="stat-rot">0%</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Angle:</span>
+          <span class="stat-value" id="stat-rot-angle">0°</span>
+        </div>
+      </div>
+    </div>
+  </div>
+    <script>
+    // ==================== КОНФИГУРАЦИЯ ====================
+    const SERVER_URL = '';
+    const DEAD_ZONE = 0.08;              // Игнорируем движения меньше 8%
+    const MIN_SEND_INTERVAL_MS = 50;     // Не чаще чем раз в 50 мс (20 Гц)
+
+    // ==================== GLOBALS ====================
+    let motionState = { x: 0, y: 0, angle: 0, speed: 0 };
+    let rotationState = { x: 0, y: 0, angle: 0, rotation: 0 };
+    let touchTracking = new Map();
+    let lastSentCmd = { x: 0, y: 0, rot: 0, speed: 0, angle: 0 };
+    let lastSendTime = 0;
+
+    const LEFT = 'left';
+    const RIGHT = 'right';
+
+    // ==================== JOYSTICK CLASSES ====================
+    class JoystickController {
+        constructor(side, baseId, knobId) {
+            this.side = side;
+            this.baseElement = document.getElementById(baseId);
+            this.knobElement = document.getElementById(knobId);
+            this.isActive = false;
+            this.currentTouchId = null;
+            this.x = 0;
+            this.y = 0;
+            this.angle = 0;
+            this.magnitude = 0;
+            
+            this.setupListeners();
+            this.updateDimensions();
+        }
+
+        updateDimensions() {
+            this.baseRect = this.baseElement.getBoundingClientRect();
+            this.centerX = this.baseRect.left + this.baseRect.width / 2;
+            this.centerY = this.baseRect.top + this.baseRect.height / 2;
+            this.radius = this.baseRect.width / 2 - 10;
+        }
+
+        setupListeners() {
+            this.baseElement.addEventListener('touchstart', (e) => this.handleTouchStart(e));
+            document.addEventListener('touchmove', (e) => this.handleTouchMove(e));
+            document.addEventListener('touchend', (e) => this.handleTouchEnd(e));
+            document.addEventListener('touchcancel', (e) => this.handleTouchEnd(e));
+            this.knobElement.addEventListener('mousedown', (e) => this.handleMouseStart(e));
+            document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+            document.addEventListener('mouseup', (e) => this.handleMouseEnd(e));
+            window.addEventListener('resize', () => this.updateDimensions());
+        }
+
+        handleTouchStart(e) {
+            e.preventDefault();
+            for (let touch of e.touches) {
+                const rect = this.baseElement.getBoundingClientRect();
+                if (touch.clientX >= rect.left && touch.clientX <= rect.right && 
+                    touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                    if (!touchTracking.has(touch.identifier)) {
+                        touchTracking.set(touch.identifier, this.side);
+                        this.currentTouchId = touch.identifier;
+                        this.isActive = true;
+                        this.knobElement.classList.add('active');
+                        this.moveKnob(touch.clientX, touch.clientY);
+                    }
+                }
+            }
+        }
+
+        handleTouchMove(e) {
+            for (let touch of e.touches) {
+                if (touchTracking.get(touch.identifier) === this.side && this.currentTouchId === touch.identifier) {
+                    e.preventDefault();
+                    this.moveKnob(touch.clientX, touch.clientY);
+                }
+            }
+        }
+
+        handleTouchEnd(e) {
+            for (let touch of e.changedTouches) {
+                if (touchTracking.get(touch.identifier) === this.side) {
+                    touchTracking.delete(touch.identifier);
+                    if (this.currentTouchId === touch.identifier) {
+                        this.reset();
+                    }
+                }
+            }
+        }
+
+        handleMouseStart(e) {
+            this.isActive = true;
+            this.knobElement.classList.add('active');
+            this.moveKnob(e.clientX, e.clientY);
+        }
+
+        handleMouseMove(e) {
+            if (this.isActive && this.currentTouchId === null) {
+                this.moveKnob(e.clientX, e.clientY);
+            }
+        }
+
+        handleMouseEnd(e) {
+            if (this.isActive && this.currentTouchId === null) {
+                this.reset();
+            }
+        }
+
+        moveKnob(clientX, clientY) {
+            this.updateDimensions();
+            let deltaX = clientX - this.centerX;
+            let deltaY = clientY - this.centerY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            if (distance > this.radius) {
+                deltaX = (deltaX / distance) * this.radius;
+                deltaY = (deltaY / distance) * this.radius;
+            }
+            this.knobElement.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px))`;
+            this.x = deltaX / this.radius;
+            this.y = -deltaY / this.radius;
+            this.magnitude = Math.sqrt(this.x * this.x + this.y * this.y);
+            const angleRad = Math.atan2(this.y, this.x);
+            this.angle = Math.round((angleRad * 180 / Math.PI + 360) % 360);
+            this.updateState();
+        }
+
+        updateState() {
+            if (this.side === LEFT) {
+                motionState = { x: this.x, y: this.y, angle: this.angle, speed: this.magnitude * 25 };
+                updateMotionStats();
+            }
+            sendControlCommand();
+        }
+
+        reset() {
+            this.isActive = false;
+            this.currentTouchId = null;
+            this.knobElement.classList.remove('active');
+            this.knobElement.style.transform = 'translate(-50%, -50%)';
+            this.x = 0; this.y = 0; this.angle = 0; this.magnitude = 0;
+            motionState = { x: 0, y: 0, angle: 0, speed: 0 };
+            updateMotionStats();
+            sendControlCommand();
+        }
+    }
+
+    class TumblerController {
+        constructor(side, baseId, knobId) {
+            this.side = side;
+            this.baseElement = document.getElementById(baseId);
+            this.knobElement = document.getElementById(knobId);
+            this.isActive = false;
+            this.y = 0;
+            this.rotation = 0;
+            this.setupListeners();
+            this.updateDimensions();
+        }
+
+        updateDimensions() {
+            this.baseRect = this.baseElement.getBoundingClientRect();
+            this.centerX = this.baseRect.left + this.baseRect.width / 2;
+            this.travelDistance = this.baseRect.width / 2 - 10;
+        }
+
+        setupListeners() {
+            this.baseElement.addEventListener('touchstart', (e) => this.handleTouchStart(e));
+            document.addEventListener('touchmove', (e) => this.handleTouchMove(e));
+            document.addEventListener('touchend', (e) => this.handleTouchEnd(e));
+            this.knobElement.addEventListener('mousedown', (e) => this.handleMouseStart(e));
+            document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+            document.addEventListener('mouseup', (e) => this.handleMouseEnd(e));
+            window.addEventListener('resize', () => this.updateDimensions());
+        }
+
+        handleTouchStart(e) {
+            e.preventDefault();
+            for (let touch of e.touches) {
+                const rect = this.baseElement.getBoundingClientRect();
+                if (touch.clientX >= rect.left && touch.clientX <= rect.right && 
+                    touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                    if (!touchTracking.has(touch.identifier)) {
+                        touchTracking.set(touch.identifier, this.side);
+                        this.isActive = true;
+                        this.knobElement.classList.add('active');
+                        this.moveKnob(touch.clientX);
+                    }
+                }
+            }
+        }
+
+        handleTouchMove(e) {
+            for (let touch of e.touches) {
+                if (touchTracking.get(touch.identifier) === this.side) {
+                    e.preventDefault();
+                    this.moveKnob(touch.clientX);
+                }
+            }
+        }
+
+        handleTouchEnd(e) {
+            for (let touch of e.changedTouches) {
+                if (touchTracking.get(touch.identifier) === this.side) {
+                    touchTracking.delete(touch.identifier);
+                    if (this.isActive) this.springBack();
+                }
+            }
+        }
+
+        handleMouseStart(e) {
+            this.isActive = true;
+            this.knobElement.classList.add('active');
+            this.moveKnob(e.clientX);
+        }
+
+        handleMouseMove(e) {
+            if (this.isActive) this.moveKnob(e.clientX);
+        }
+
+        handleMouseEnd(e) {
+            if (this.isActive) this.springBack();
+        }
+
+        moveKnob(clientX) {
+            this.updateDimensions();
+            let deltaX = clientX - this.centerX;
+            if (deltaX > this.travelDistance) deltaX = this.travelDistance;
+            if (deltaX < -this.travelDistance) deltaX = -this.travelDistance;
+            this.knobElement.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50%))`;
+            this.y = -deltaX / this.travelDistance;
+            this.rotation = -this.y * 20;
+            rotationState = { x: 0, y: this.y, angle: 0, rotation: this.rotation };
+            updateRotationStats();
+            sendControlCommand();
+        }
+
+        springBack() {
+            this.isActive = false;
+            this.knobElement.classList.remove('active');
+            this.knobElement.style.transform = 'translate(-50%, -50%)';
+            this.y = 0;
+            this.rotation = 0;
+            rotationState = { x: 0, y: 0, angle: 0, rotation: 0 };
+            updateRotationStats();
+            sendControlCommand();
+        }
+
+        reset() {
+            this.isActive = false;
+            this.knobElement.classList.remove('active');
+            this.knobElement.style.transform = 'translate(-50%, -50%)';
+            this.y = 0;
+            this.rotation = 0;
+            rotationState = { x: 0, y: 0, angle: 0, rotation: 0 };
+            updateRotationStats();
+            sendControlCommand();
+        }
+    }
+
+    // ==================== ОТПРАВКА КОМАНД (С ОПТИМИЗАЦИЕЙ) ====================
+    function sendControlCommand() {
+        let moveX = leftJoystick ? leftJoystick.x : 0;
+        let moveY = leftJoystick ? leftJoystick.y : 0;
+        let rot = rightTumbler ? -rightTumbler.y : 0;
+        
+        // Мёртвая зона - игнорируем очень маленькие движения
+        if (Math.abs(moveX) < DEAD_ZONE) moveX = 0;
+        if (Math.abs(moveY) < DEAD_ZONE) moveY = 0;
+        if (Math.abs(rot) < DEAD_ZONE) rot = 0;
+        
+        // Вычисляем скорость (максимум 1)
+        let speed = Math.min(Math.sqrt(moveX * moveX + moveY * moveY), 1);
+        let angle = 0;
+        
+        if (speed > 0.01) {
+            // Стандартный atan2: 0° = вправо (1,0), 90° = вверх (0,1)
+            let rawAngle = Math.atan2(moveY, moveX);
+            // Преобразуем: нужно 0° = вперёд (0,1)
+            // rawAngle: (0,1) даёт 90°, вычитаем 90° → 0°
+            angle = -(rawAngle - Math.PI / 2);
+            // Нормализуем угол в диапазон [-π, π]
+            if (angle > Math.PI) angle -= 2 * Math.PI;
+            if (angle < -Math.PI) angle += 2 * Math.PI;
+        }
+        
+        // Проверяем, изменились ли значения
+        if (lastSentCmd.x === moveX && lastSentCmd.y === moveY && lastSentCmd.rot === rot &&
+            lastSentCmd.speed === speed && lastSentCmd.angle === angle) {
+            return;
+        }
+        
+        // Ограничиваем частоту отправки
+        const now = Date.now();
+        if (now - lastSendTime < MIN_SEND_INTERVAL_MS) {
+            return;
+        }
+        lastSendTime = now;
+        
+        lastSentCmd = { x: moveX, y: moveY, rot: rot, speed: speed, angle: angle };
+        
+        // Отправляем: x = speed, y = angle (как в Python)
+        fetch(`${SERVER_URL}/motion?x=${speed.toFixed(3)}&y=${angle.toFixed(3)}&rot=${rot.toFixed(3)}`)
+            .catch(err => console.log('Server error:', err));
+    }
+
+    function sendStopCommand() {
+        fetch(`${SERVER_URL}/stop`).catch(e => console.log(e));
+        lastSentCmd = { x: 0, y: 0, rot: 0, speed: 0, angle: 0 };  // ← добавил speed и angle
+    }
+
+    // ==================== UPDATE STATS DISPLAY ====================
+    function updateMotionStats() {
+        document.getElementById('stat-x').textContent = motionState.x.toFixed(3);
+        document.getElementById('stat-y').textContent = motionState.y.toFixed(3);
+        document.getElementById('stat-speed').textContent = motionState.speed.toFixed(0) + '%';
+        document.getElementById('stat-angle').textContent = motionState.angle + '°';
+    }
+
+    function updateRotationStats() {
+        document.getElementById('stat-rot-x').textContent = rotationState.x.toFixed(3);
+        document.getElementById('stat-rot-y').textContent = rotationState.y.toFixed(3);
+        document.getElementById('stat-rot').textContent = rotationState.rotation.toFixed(0) + '%';
+        document.getElementById('stat-rot-angle').textContent = rotationState.angle + '°';
+    }
+
+    // ==================== STOP FUNCTION ====================
+    function stopJoystick(side) {
+        if (leftJoystick) leftJoystick.reset();
+        if (rightTumbler) rightTumbler.reset();
+        sendStopCommand();
+    }
+
+    // ==================== INITIALIZE ====================
+    const leftJoystick = new JoystickController(LEFT, 'joystick-left-base', 'joystick-left-knob');
+    const rightTumbler = new TumblerController(RIGHT, 'joystick-right-base', 'joystick-right-knob');
+
+    updateMotionStats();
+    updateRotationStats();
+    </script>
+</body>
+
+</html>
+

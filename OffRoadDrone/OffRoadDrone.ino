@@ -10,7 +10,7 @@
 #include <queue>
 #include <cstring>
 
-#define CONTROLLER_ID 5  // Обозначение номера контроллера
+#define CONTROLLER_ID 7  // Обозначение номера контроллера
 
 #include <WebServer.h>
 #include <ESPmDNS.h>
@@ -301,26 +301,26 @@ void setWheelSpeeds(float V, float A, float W) {
     // LeftMotor.setOmega(-lastNeedWL);
 
     // // Колеса 5 и 6
-    double A2 = 3.14159265 / 3;
-    double Vx2 = V * cos(A-A2);
-    double Vy2 = V * sin(A-A2);
-    // Право колесо (5)
-    lastNeedWR = (-Vx2-Vy2-W);
-    RightMotor.setOmega(lastNeedWR);
-    // Левое колесо (6)
-    lastNeedWL = (-Vx2+Vy2-W);
-    LeftMotor.setOmega(lastNeedWL);
-
-    // // Колеса 7 и 8
     // double A2 = 3.14159265 / 3;
     // double Vx2 = V * cos(A-A2);
     // double Vy2 = V * sin(A-A2);
-    // // Право колесо (7)
-    // lastNeedWR = (-Vx2-Vy2+W);
-    // RightMotor.setOmega(-lastNeedWR);
-    // // Левое колесо (8)
-    // lastNeedWL = (-Vx2+Vy2+W);
-    // LeftMotor.setOmega(-lastNeedWL);
+    // // Право колесо (5)
+    // lastNeedWR = (-Vx2-Vy2-W);
+    // RightMotor.setOmega(lastNeedWR);
+    // // Левое колесо (6)
+    // lastNeedWL = (-Vx2+Vy2-W);
+    // LeftMotor.setOmega(lastNeedWL);
+
+    // // Колеса 7 и 8
+    double A2 = 3.14159265 / 3;
+    double Vx2 = V * cos(A-A2);
+    double Vy2 = V * sin(A-A2);
+    // Право колесо (7)
+    lastNeedWR = (-Vx2-Vy2+W);
+    RightMotor.setOmega(-lastNeedWR);
+    // Левое колесо (8)
+    lastNeedWL = (-Vx2+Vy2+W);
+    LeftMotor.setOmega(-lastNeedWL);
 
     // // Колеса 9 и 10
     // double A2 = 2 * 3.14159265 / 3;
@@ -499,8 +499,8 @@ void processMovement() {
         if (currentVectorId != 0) {
             lastFactWL = LeftMotor.getOmega();  // Получаем реальную скорость левого колеса
             lastFactWR = RightMotor.getOmega();  // Получаем реальную скорость правого колеса
-            logMovement(currentVectorId, lastNeedWL, lastFactWL, 1);
-            logMovement(currentVectorId, lastNeedWR, lastFactWR, 2);
+            logMovement(currentVectorId, lastNeedWL, -lastFactWL, 1);
+            logMovement(currentVectorId, lastNeedWR, -lastFactWR, 2);
         }
 
         if (!loadNextVector()) {
@@ -615,6 +615,26 @@ void parsePacket(char* data, int len) {
         } else if (command == 0) {
             stopMovement();
         }
+
+        else if (command == 3 && inMovement == false) {
+            // Ищем вторую точку с запятой (после "command;3;")
+            char* ptr = strchr(buffer, ';');  // первая ';' после "command"
+            if (ptr) {
+                ptr = strchr(ptr + 1, ';');   // вторая ';' после "3"
+                if (ptr) {
+                    ptr++;  // переходим к данным после ";"
+                    
+                    float V = strtof(ptr, &ptr);
+                    if (*ptr == ';') ptr++;
+                    float A = strtof(ptr, &ptr);
+                    if (*ptr == ';') ptr++;
+                    float W = strtof(ptr, &ptr);
+                    
+                    setWheelSpeeds(V, A, W);
+                }
+            }
+        }
+
         return;
     }
     
