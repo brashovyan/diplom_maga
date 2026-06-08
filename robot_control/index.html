@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>🤖Remote Control</title>
+  <title>Управление роботом</title>
   <style>
 * {
     margin: 0;
@@ -310,81 +310,102 @@ span {
 </head>
 
 <body>
-  <h1>🚗REMOTE CONTROL🤖</h1>
+  <h1>Управление в реальном времени</h1>
   
   <header>
   </header>
 
   <div class="main-container">
-    <!-- LEFT WORKSPACE: Linear Motion Joystick -->
     <div class="workspace">
-      <div class="workspace-label">👆 Linear Motion (Left Finger)</div>
+      <div class="workspace-label">Джойстик основного управления</div>
       <div class="joystick-base" id="joystick-left-base">
         <div class="joystick-knob" id="joystick-left-knob"></div>
       </div>
       <button class="stop-button" id="stop-left" onclick="stopJoystick('left')">⏹️ STOP</button>
       <div class="stats-panel">
-        <div class="stats-title">Motion Stats</div>
+        <div class="stats-title">Статус</div>
         <div class="stat-item">
-          <span class="stat-label">X Axis:</span>
+          <span class="stat-label">X:</span>
           <span class="stat-value" id="stat-x">0.000</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Y Axis:</span>
+          <span class="stat-label">Y:</span>
           <span class="stat-value" id="stat-y">0.000</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Speed:</span>
+          <span class="stat-label">Скорость:</span>
           <span class="stat-value" id="stat-speed">0%</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Angle:</span>
+          <span class="stat-label">Угол:</span>
           <span class="stat-value" id="stat-angle">0°</span>
         </div>
       </div>
     </div>
 
-    <!-- RIGHT WORKSPACE: Rotation Joystick -->
     <div class="workspace">
-      <div class="workspace-label">👆 Rotation Control (Right Finger)</div>
+      <div class="workspace-label">Поворот вокруг своей оси</div>
       <div class="joystick-base" id="joystick-right-base">
         <div class="joystick-knob" id="joystick-right-knob"></div>
       </div>
       <button class="stop-button" id="stop-right" onclick="stopJoystick('right')">⏹️ STOP</button>
       <div class="stats-panel">
-        <div class="stats-title">Rotation Stats</div>
+        <div class="stats-title">Статус</div>
         <div class="stat-item">
-          <span class="stat-label">Rot X:</span>
+          <span class="stat-label">X:</span>
           <span class="stat-value" id="stat-rot-x">0.000</span>
         </div>
-        <div class="stat-item">
-          <span class="stat-label">Rot Y:</span>
+        <!-- <div class="stat-item">
+          <span class="stat-label">Y:</span>
           <span class="stat-value" id="stat-rot-y">0.000</span>
-        </div>
+        </div> -->
         <div class="stat-item">
-          <span class="stat-label">Rotation:</span>
+          <span class="stat-label">Вращение:</span>
           <span class="stat-value" id="stat-rot">0%</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">Angle:</span>
-          <span class="stat-value" id="stat-rot-angle">0°</span>
         </div>
       </div>
     </div>
   </div>
     <script>
     // ==================== КОНФИГУРАЦИЯ ====================
-    const SERVER_URL = '';
-    const DEAD_ZONE = 0.08;              // Игнорируем движения меньше 8%
-    const MIN_SEND_INTERVAL_MS = 50;     // Не чаще чем раз в 50 мс (20 Гц)
-
+    const DEAD_ZONE = 0.08;
+    const MIN_SEND_INTERVAL_MS = 50;
+    
+    // WebSocket соединение
+    let ws = null;
+    let wsConnected = false;
+    
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            wsConnected = true;
+        };
+        
+        ws.onclose = () => {
+            console.log('WebSocket disconnected, reconnecting...');
+            wsConnected = false;
+            setTimeout(connectWebSocket, 1000);
+        };
+        
+        ws.onerror = (err) => {
+            console.error('WebSocket error:', err);
+        };
+    }
+    
+    connectWebSocket();
+    
     // ==================== GLOBALS ====================
     let motionState = { x: 0, y: 0, angle: 0, speed: 0 };
     let rotationState = { x: 0, y: 0, angle: 0, rotation: 0 };
     let touchTracking = new Map();
     let lastSentCmd = { x: 0, y: 0, rot: 0, speed: 0, angle: 0 };
     let lastSendTime = 0;
-
+    
     const LEFT = 'left';
     const RIGHT = 'right';
 
@@ -628,83 +649,84 @@ span {
         }
     }
 
-    // ==================== ОТПРАВКА КОМАНД (С ОПТИМИЗАЦИЕЙ) ====================
+    // ==================== ОТПРАВКА КОМАНД (WebSocket) ====================
     function sendControlCommand() {
         let moveX = leftJoystick ? leftJoystick.x : 0;
         let moveY = leftJoystick ? leftJoystick.y : 0;
         let rot = rightTumbler ? -rightTumbler.y : 0;
         
-        // Мёртвая зона - игнорируем очень маленькие движения
+        // Мёртвая зона
         if (Math.abs(moveX) < DEAD_ZONE) moveX = 0;
         if (Math.abs(moveY) < DEAD_ZONE) moveY = 0;
         if (Math.abs(rot) < DEAD_ZONE) rot = 0;
         
-        // Вычисляем скорость (максимум 1)
+        // Вычисляем скорость и угол
         let speed = Math.min(Math.sqrt(moveX * moveX + moveY * moveY), 1);
         let angle = 0;
         
         if (speed > 0.01) {
-            // Стандартный atan2: 0° = вправо (1,0), 90° = вверх (0,1)
             let rawAngle = Math.atan2(moveY, moveX);
-            // Преобразуем: нужно 0° = вперёд (0,1)
-            // rawAngle: (0,1) даёт 90°, вычитаем 90° → 0°
             angle = -(rawAngle - Math.PI / 2);
-            // Нормализуем угол в диапазон [-π, π]
             if (angle > Math.PI) angle -= 2 * Math.PI;
             if (angle < -Math.PI) angle += 2 * Math.PI;
         }
         
-        // Проверяем, изменились ли значения
+        // Проверяем изменения
         if (lastSentCmd.x === moveX && lastSentCmd.y === moveY && lastSentCmd.rot === rot &&
             lastSentCmd.speed === speed && lastSentCmd.angle === angle) {
             return;
         }
         
-        // Ограничиваем частоту отправки
+        // Ограничиваем частоту
         const now = Date.now();
-        if (now - lastSendTime < MIN_SEND_INTERVAL_MS) {
-            return;
-        }
+        if (now - lastSendTime < MIN_SEND_INTERVAL_MS) return;
         lastSendTime = now;
         
         lastSentCmd = { x: moveX, y: moveY, rot: rot, speed: speed, angle: angle };
         
-        // Отправляем: x = speed, y = angle (как в Python)
-        fetch(`${SERVER_URL}/motion?x=${speed.toFixed(3)}&y=${angle.toFixed(3)}&rot=${rot.toFixed(3)}`)
-            .catch(err => console.log('Server error:', err));
+        // Отправляем через WebSocket
+        if (wsConnected && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'motion',
+                speed: speed,
+                angle: angle,
+                omega: rot
+            }));
+        }
     }
-
+    
     function sendStopCommand() {
-        fetch(`${SERVER_URL}/stop`).catch(e => console.log(e));
-        lastSentCmd = { x: 0, y: 0, rot: 0, speed: 0, angle: 0 };  // ← добавил speed и angle
+        if (wsConnected && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'stop' }));
+        }
+        lastSentCmd = { x: 0, y: 0, rot: 0, speed: 0, angle: 0 };
     }
-
-    // ==================== UPDATE STATS DISPLAY ====================
+    
+    // ==================== UPDATE STATS ====================
     function updateMotionStats() {
         document.getElementById('stat-x').textContent = motionState.x.toFixed(3);
         document.getElementById('stat-y').textContent = motionState.y.toFixed(3);
-        document.getElementById('stat-speed').textContent = motionState.speed.toFixed(0) + '%';
+        document.getElementById('stat-speed').textContent = motionState.speed.toFixed(0) * 4 + '%';
         document.getElementById('stat-angle').textContent = motionState.angle + '°';
     }
-
+    
     function updateRotationStats() {
-        document.getElementById('stat-rot-x').textContent = rotationState.x.toFixed(3);
-        document.getElementById('stat-rot-y').textContent = rotationState.y.toFixed(3);
-        document.getElementById('stat-rot').textContent = rotationState.rotation.toFixed(0) + '%';
+        document.getElementById('stat-rot-x').textContent = -rotationState.y.toFixed(3);
+        //document.getElementById('stat-rot-y').textContent = rotationState.y.toFixed(3);
+        document.getElementById('stat-rot').textContent = rotationState.rotation.toFixed(0) * 5 + '%';
         document.getElementById('stat-rot-angle').textContent = rotationState.angle + '°';
     }
-
-    // ==================== STOP FUNCTION ====================
+    
     function stopJoystick(side) {
         if (leftJoystick) leftJoystick.reset();
         if (rightTumbler) rightTumbler.reset();
         sendStopCommand();
     }
-
+    
     // ==================== INITIALIZE ====================
     const leftJoystick = new JoystickController(LEFT, 'joystick-left-base', 'joystick-left-knob');
     const rightTumbler = new TumblerController(RIGHT, 'joystick-right-base', 'joystick-right-knob');
-
+    
     updateMotionStats();
     updateRotationStats();
     </script>
