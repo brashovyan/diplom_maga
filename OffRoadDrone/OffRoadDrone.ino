@@ -58,8 +58,6 @@ struct QueuedPacket {
 std::queue<QueuedPacket> packetQueue;
 
 //Параметры коммуникационного процессора=============================================================
-char ssid[] = "KeyTim";          //Идентификатор WiFi-сети робота (в режиме: "точка доступа")
-char pass[] = "18273645";         //Пароль доступа к WiFi-сети
 IPAddress localIP;                // Локальный IP-адрес
 AsyncUDP udp;                     //UDP-сервер
 IPAddress groupIP(239,1,1,1);     //Прослушиваемый групповой IP-адрес
@@ -592,49 +590,49 @@ void Init_Wifi() {
     // Настраиваем веб-сервер для страницы настройки
     webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         String html = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>Robot WiFi Setup</title>
-    <style>
-        body{font-family:Arial;background:#1a1a2e;color:white;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-        .container{background:#16213e;padding:30px;border-radius:20px;width:300px}
-        input{width:100%;padding:10px;margin:10px 0;border-radius:5px;border:none}
-        button{width:100%;padding:10px;background:#e94560;color:white;border:none;border-radius:5px;cursor:pointer}
-        .status{color:#ffd700;margin-top:10px;text-align:center}
-    </style>
-</head>
-<body>
-    <div class='container'>
-        <h2>🤖 Robot WiFi Setup</h2>
-        <form id='wifiForm'>
-            <input type='text' id='ssid' placeholder='WiFi SSID' required>
-            <input type='password' id='password' placeholder='WiFi Password'>
-            <button type='submit'>Connect</button>
-        </form>
-        <div class='status' id='status'></div>
-    </div>
-    <script>
-        document.getElementById('wifiForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const ssid = document.getElementById('ssid').value;
-            const pass = document.getElementById('password').value;
-            document.getElementById('status').innerHTML = 'Connecting...';
-            const res = await fetch('/connect', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ssid, pass})
-            });
-            const data = await res.text();
-            document.getElementById('status').innerHTML = data;
-            if (res.ok) setTimeout(() => location.reload(), 3000);
-        };
-    </script>
-</body>
-</html>
-        )rawliteral";
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset='UTF-8'>
+                <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+                <title>Robot WiFi Setup</title>
+                <style>
+                    body{font-family:Arial;background:#1a1a2e;color:white;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+                    .container{background:#16213e;padding:30px;border-radius:20px;width:300px}
+                    input{width:100%;padding:10px;margin:10px 0;border-radius:5px;border:none}
+                    button{width:100%;padding:10px;background:#e94560;color:white;border:none;border-radius:5px;cursor:pointer}
+                    .status{color:#ffd700;margin-top:10px;text-align:center}
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <h2>🤖 Robot WiFi Setup</h2>
+                    <form id='wifiForm'>
+                        <input type='text' id='ssid' placeholder='WiFi SSID' required>
+                        <input type='password' id='password' placeholder='WiFi Password'>
+                        <button type='submit'>Connect</button>
+                    </form>
+                    <div class='status' id='status'></div>
+                </div>
+                <script>
+                    document.getElementById('wifiForm').onsubmit = async (e) => {
+                        e.preventDefault();
+                        const ssid = document.getElementById('ssid').value;
+                        const pass = document.getElementById('password').value;
+                        document.getElementById('status').innerHTML = 'Connecting...';
+                        const res = await fetch('/connect', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ssid, pass})
+                        });
+                        const data = await res.text();
+                        document.getElementById('status').innerHTML = data;
+                        if (res.ok) setTimeout(() => location.reload(), 3000);
+                    };
+                </script>
+            </body>
+            </html>
+                    )rawliteral";
         request->send(200, "text/html", html);
     });
     
