@@ -17,6 +17,21 @@
 
 WebServer server(80);
 
+#include <Preferences.h>
+#include <DNSServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+
+// Настройки точки доступа (если не удалось подключиться)
+#define AP_SSID "Robot_Config"        // Имя точки доступа
+#define AP_PASS "12345678"            // Пароль
+#define AP_IP 192,168,4,1
+
+Preferences prefs;
+AsyncWebServer webServer(80);
+DNSServer dnsServer;
+bool wifiConfigured = false;
+
 #include <Ticker.h>
 
 //Управляющие линии колес
@@ -528,33 +543,122 @@ int db_exec(sqlite3 *db, const char *sql) {
    return rc;                                                               //Выдача кода-результата запроса вызывающей функции
 }
 
-//Процедура инициализации WiFi-сети
-void Init_Wifi(){
-  Serial.println("\nИнициация WiFi-модуля на ESP32");
-  
-  WiFi.begin(ssid, pass);
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 200) { // ~10 секунд
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  Serial.println();
-  
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.printf("Ошибка: статус подключения = %d\n", WiFi.status());
-    Serial.println("Возможные причины:");
-    Serial.println(" - Неверный пароль (особенно если есть ! @ # $ % ^ & *)");
-    Serial.println(" - Скрытая сеть (надо добавить WiFi.setMinSecurity)");
-    Serial.println(" - Роутер не в смешанном режиме b/g/n");
-    return;
-  }
-  
-  localIP = WiFi.localIP();
-  Serial.print("\tЛокальный IP-адрес: ");
-  Serial.println(localIP);
-  Serial.printf("\tГрупповой IP-адрес: %s\n", groupIP.toString().c_str());
+void Init_Wifi() {
+    Serial.println("=== WiFi Configuration ===");
+    
+    // 1. Читаем сохранённые настройки
+    prefs.begin("wifi-config", false);
+    String savedSsid = prefs.getString("wifi_ssid", "");
+    String savedPass = prefs.getString("wifi_pass", "");
+    prefs.end();
+    
+    // 2. Если есть сохранённые настройки - пробуем подключиться
+    if (savedSsid.length() > 0) {
+        Serial.printf("Connecting to saved WiFi: %s\n", savedSsid.c_str());
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(savedSsid.c_str(), savedPass.c_str());
+        
+        int attempts = 0;
+        while (WiFi.status() != WL_CONNECTED && attempts < 30) { // 15 секунд
+            delay(500);
+            Serial.print(".");
+            attempts++;
+        }
+        
+        if (WiFi.status() == WL_CONNECTED) {
+            localIP = WiFi.localIP();
+            Serial.println("WiFi connected!");
+            Serial.printf("   IP: %s\n", localIP.toString().c_str());
+            wifiConfigured = true;
+            return;
+        } else {
+            Serial.println("Failed to connect to saved WiFi");
+        }
+    }
+    
+    // 3. Если не удалось подключиться - запускаем точку доступа
+    Serial.println("Starting Access Point for configuration...");
+    WiFi.mode(WIFI_AP);
+    WiFi.softAPConfig(IPAddress(AP_IP), IPAddress(AP_IP), IPAddress(255,255,255,0));
+    WiFi.softAP(AP_SSID, AP_PASS);
+    
+    Serial.printf("   AP SSID: %s\n", AP_SSID);
+    Serial.printf("   AP Password: %s\n", AP_PASS);
+    Serial.printf("   AP IP: %s\n", WiFi.softAPIP().toString());
+    
+    // Запускаем DNS сервер для перенаправления на страницу настройки
+    dnsServer.start(53, "*", WiFi.softAPIP());
+    
+    // Настраиваем веб-сервер для страницы настройки
+    webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        String html = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Robot WiFi Setup</title>
+    <style>
+        body{font-family:Arial;background:#1a1a2e;color:white;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+        .container{background:#16213e;padding:30px;border-radius:20px;width:300px}
+        input{width:100%;padding:10px;margin:10px 0;border-radius:5px;border:none}
+        button{width:100%;padding:10px;background:#e94560;color:white;border:none;border-radius:5px;cursor:pointer}
+        .status{color:#ffd700;margin-top:10px;text-align:center}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h2>🤖 Robot WiFi Setup</h2>
+        <form id='wifiForm'>
+            <input type='text' id='ssid' placeholder='WiFi SSID' required>
+            <input type='password' id='password' placeholder='WiFi Password'>
+            <button type='submit'>Connect</button>
+        </form>
+        <div class='status' id='status'></div>
+    </div>
+    <script>
+        document.getElementById('wifiForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const ssid = document.getElementById('ssid').value;
+            const pass = document.getElementById('password').value;
+            document.getElementById('status').innerHTML = 'Connecting...';
+            const res = await fetch('/connect', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ssid, pass})
+            });
+            const data = await res.text();
+            document.getElementById('status').innerHTML = data;
+            if (res.ok) setTimeout(() => location.reload(), 3000);
+        };
+    </script>
+</body>
+</html>
+        )rawliteral";
+        request->send(200, "text/html", html);
+    });
+    
+    webServer.on("/connect", HTTP_POST, [](AsyncWebServerRequest *request) {
+        String ssid = request->arg("ssid");
+        String pass = request->arg("pass");
+        
+        if (ssid.length() > 0) {
+            prefs.begin("wifi-config", false);
+            prefs.putString("wifi_ssid", ssid);
+            prefs.putString("wifi_pass", pass);
+            prefs.end();
+            
+            request->send(200, "text/plain", "Saved! Rebooting...");
+            delay(1000);
+            ESP.restart();
+        } else {
+            request->send(400, "text/plain", "SSID required");
+        }
+    });
+    
+    webServer.begin();
+    Serial.println("Configuration web server started");
+    Serial.printf("Connect to http://%s\n", WiFi.softAPIP().toString());
 }
 
 //Добавить новый вектор в БД
@@ -782,6 +886,11 @@ void setup() {
 
     Init_Wifi();
 
+    if (wifiConfigured) {
+        // Выключаем точку доступа
+        WiFi.softAPdisconnect(true);
+    }
+
   // Подписываемся на мультикаст
   if (udp.listenMulticast(groupIP, portUDP, TCPIP_ADAPTER_IF_STA)) {
         udp.onPacket([](AsyncUDPPacket packet) {
@@ -842,6 +951,11 @@ void processPacketQueue() {
 }
 
 void loop() {
+    // Если в режиме точки доступа - обрабатываем DNS и веб-сервер
+    if (!wifiConfigured) {
+        dnsServer.processNextRequest();
+    }
+
     // Обрабатываем входящие UDP-пакеты из очереди
     processPacketQueue();
     
