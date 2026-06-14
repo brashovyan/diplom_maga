@@ -10,7 +10,7 @@
 #include <queue>
 #include <cstring>
 
-#define CONTROLLER_ID 7  // Обозначение номера контроллера
+#define CONTROLLER_ID 9  // Обозначение номера контроллера
 
 #include <WebServer.h>
 #include <ESPmDNS.h>
@@ -23,7 +23,7 @@ WebServer server(80);
 #include <ESPAsyncWebServer.h>
 
 // Настройки точки доступа (если не удалось подключиться)
-#define AP_SSID "Robot_Config"        // Имя точки доступа
+#define AP_SSID "Robot_Config_9"        // Имя точки доступа
 #define AP_PASS "12345678"            // Пароль
 #define AP_IP 192,168,4,1
 
@@ -325,26 +325,26 @@ void setWheelSpeeds(float V, float A, float W) {
     // LeftMotor.setOmega(lastNeedWL);
 
     // // Колеса 7 и 8
-    double A2 = 3.14159265 / 3;
-    double Vx2 = V * cos(A-A2);
-    double Vy2 = V * sin(A-A2);
-    // Право колесо (7)
-    lastNeedWR = (-Vx2-Vy2+W);
-    RightMotor.setOmega(-lastNeedWR);
-    // Левое колесо (8)
-    lastNeedWL = (-Vx2+Vy2+W);
-    LeftMotor.setOmega(-lastNeedWL);
-
-    // // Колеса 9 и 10
-    // double A2 = 2 * 3.14159265 / 3;
+    // double A2 = 3.14159265 / 3;
     // double Vx2 = V * cos(A-A2);
     // double Vy2 = V * sin(A-A2);
-    // // Право колесо (9)
-    // lastNeedWR = (-Vx2-Vy2-W);
-    // RightMotor.setOmega(lastNeedWR);
-    // // Левое колесо (10)
-    // lastNeedWL = (-Vx2+Vy2-W);
-    // LeftMotor.setOmega(lastNeedWL);
+    // // Право колесо (7)
+    // lastNeedWR = (-Vx2-Vy2+W);
+    // RightMotor.setOmega(-lastNeedWR);
+    // // Левое колесо (8)
+    // lastNeedWL = (-Vx2+Vy2+W);
+    // LeftMotor.setOmega(-lastNeedWL);
+
+    // // Колеса 9 и 10
+    double A2 = 2 * 3.14159265 / 3;
+    double Vx2 = V * cos(A-A2);
+    double Vy2 = V * sin(A-A2);
+    // Право колесо (9)
+    lastNeedWR = (-Vx2-Vy2-W);
+    RightMotor.setOmega(lastNeedWR);
+    // Левое колесо (10)
+    lastNeedWL = (-Vx2+Vy2-W);
+    LeftMotor.setOmega(lastNeedWL);
 
     // // Колеса 11 и 12
     // double A2 = 2 * 3.14159265 / 3;
@@ -512,8 +512,8 @@ void processMovement() {
         if (currentVectorId != 0) {
             lastFactWL = LeftMotor.getOmega();  // Получаем реальную скорость левого колеса
             lastFactWR = RightMotor.getOmega();  // Получаем реальную скорость правого колеса
-            logMovement(currentVectorId, lastNeedWL, -lastFactWL, 1);
-            logMovement(currentVectorId, lastNeedWR, -lastFactWR, 2);
+            logMovement(currentVectorId, lastNeedWL, lastFactWL, 1);
+            logMovement(currentVectorId, lastNeedWR, lastFactWR, 2);
         }
 
         if (!loadNextVector()) {
@@ -591,47 +591,52 @@ void Init_Wifi() {
     webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         String html = R"rawliteral(
             <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset='UTF-8'>
-                <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-                <title>Robot WiFi Setup</title>
-                <style>
-                    body{font-family:Arial;background:#1a1a2e;color:white;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-                    .container{background:#16213e;padding:30px;border-radius:20px;width:300px}
-                    input{width:100%;padding:10px;margin:10px 0;border-radius:5px;border:none}
-                    button{width:100%;padding:10px;background:#e94560;color:white;border:none;border-radius:5px;cursor:pointer}
-                    .status{color:#ffd700;margin-top:10px;text-align:center}
-                </style>
-            </head>
-            <body>
-                <div class='container'>
-                    <h2>🤖 Robot WiFi Setup</h2>
-                    <form id='wifiForm'>
-                        <input type='text' id='ssid' placeholder='WiFi SSID' required>
-                        <input type='password' id='password' placeholder='WiFi Password'>
-                        <button type='submit'>Connect</button>
-                    </form>
-                    <div class='status' id='status'></div>
-                </div>
-                <script>
-                    document.getElementById('wifiForm').onsubmit = async (e) => {
-                        e.preventDefault();
-                        const ssid = document.getElementById('ssid').value;
-                        const pass = document.getElementById('password').value;
-                        document.getElementById('status').innerHTML = 'Connecting...';
-                        const res = await fetch('/connect', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ssid, pass})
-                        });
-                        const data = await res.text();
-                        document.getElementById('status').innerHTML = data;
-                        if (res.ok) setTimeout(() => location.reload(), 3000);
-                    };
-                </script>
-            </body>
-            </html>
+                <html>
+                <head>
+                    <meta charset='UTF-8'>
+                    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+                    <title>Robot WiFi Setup</title>
+                    <style>
+                        *{box-sizing:border-box}
+                        body{font-family:Arial;background:#1a1a2e;color:white;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+                        .container{background:#16213e;padding:30px;border-radius:20px;width:100%;max-width:350px}
+                        input,button{width:100%;padding:12px;margin:10px 0;border-radius:5px;border:none;font-size:16px}
+                        button{background:#e94560;color:white;cursor:pointer;font-weight:bold}
+                        button:hover{background:#ff6b6b}
+                        .status{color:#ffd700;margin-top:15px;text-align:center;font-size:14px}
+                        h2{text-align:center;margin-bottom:20px}
+                    </style>
+                </head>
+                <body>
+                    <div class='container'>
+                        <h2>Robot WiFi Setup</h2>
+                        <form id='wifiForm' method='POST' action='/connect'>
+                            <input type='text' name='ssid' placeholder='WiFi SSID' required>
+                            <input type='password' name='pass' placeholder='WiFi Password'>
+                            <button type='submit'>Connect</button>
+                        </form>
+                        <div class='status' id='status'></div>
+                    </div>
+                    <script>
+                        document.getElementById('wifiForm').onsubmit = async (e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.target);
+                            document.getElementById('status').innerHTML = 'Connecting...';
+                            try {
+                                const res = await fetch('/connect', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                const data = await res.text();
+                                document.getElementById('status').innerHTML = data;
+                                if (res.ok) setTimeout(() => location.reload(), 3000);
+                            } catch(err) {
+                                document.getElementById('status').innerHTML = 'Error: ' + err.message;
+                            }
+                        };
+                    </script>
+                </body>
+                </html>
                     )rawliteral";
         request->send(200, "text/html", html);
     });
